@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contact Us — Prime Horizon Group Plc</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 44 44'%3E%3Crect width='44' height='44' rx='10' fill='%2310294a'/%3E%3Cpath d='M10 30 L22 12 L34 30' stroke='%237fd8cc' stroke-width='4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='14' y1='35' x2='30' y2='35' stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <meta name="description" content="Contact Prime Horizon Group Plc in Addis Ababa for transport, IT, networking, software development and electrical engineering services.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body data-page="contact">
+  <div data-site-topbar></div>
+  <header data-site-header></header>
+
+  <section class="page-hero">
+    <div class="container">
+      <div class="breadcrumb"><a href="index.html">Home</a> / Contact</div>
+      <h1>Tell us what you need. We respond within one business day.</h1>
+      <p>Transport bookings, project briefs, support requests and partnership inquiries all go through the same door — this one.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="split" style="align-items:start; gap:44px">
+        <!-- Contact form -->
+        <div class="reveal">
+          <span class="eyebrow">Inquiry form</span>
+          <h2 style="margin-bottom:22px">Send an inquiry</h2>
+          <div id="formAlert" class="alert" role="alert"></div>
+          <form id="inquiryForm" novalidate>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="cfName">Full name <span class="req">*</span></label>
+                <input class="form-control" type="text" id="cfName" name="name" autocomplete="name" required>
+                <span class="error-msg" data-for="cfName">Please enter your name.</span>
+              </div>
+              <div class="form-group">
+                <label for="cfOrg">Organization <span class="form-note">(optional)</span></label>
+                <input class="form-control" type="text" id="cfOrg" name="organization" autocomplete="organization">
+              </div>
+              <div class="form-group">
+                <label for="cfEmail">Email <span class="req">*</span></label>
+                <input class="form-control" type="email" id="cfEmail" name="email" autocomplete="email" required>
+                <span class="error-msg" data-for="cfEmail">Please enter a valid email address.</span>
+              </div>
+              <div class="form-group">
+                <label for="cfPhone">Phone <span class="req">*</span></label>
+                <input class="form-control" type="tel" id="cfPhone" name="phone" autocomplete="tel" placeholder="+251 …" required>
+                <span class="error-msg" data-for="cfPhone">Please enter a phone number (at least 7 digits).</span>
+              </div>
+              <div class="form-group full">
+                <label for="cfTopic">What is this about? <span class="req">*</span></label>
+                <select class="form-control" id="cfTopic" name="topic" required>
+                  <option value="">Select a topic…</option>
+                  <option>Transport / fleet booking</option>
+                  <option>IT support &amp; systems</option>
+                  <option>Networking &amp; infrastructure</option>
+                  <option>Software development</option>
+                  <option>Electrical &amp; engineering</option>
+                  <option>Power &amp; energy solutions</option>
+                  <option>Supplier / partnership</option>
+                  <option>Career opportunity</option>
+                  <option>Shareholder or portal question</option>
+                  <option>Other</option>
+                </select>
+                <span class="error-msg" data-for="cfTopic">Please choose a topic.</span>
+              </div>
+              <div class="form-group full">
+                <label for="cfMessage">Message <span class="req">*</span></label>
+                <textarea class="form-control" id="cfMessage" name="message" rows="5" required placeholder="Describe your request — route, dates, site, scope…"></textarea>
+                <span class="error-msg" data-for="cfMessage">Please enter at least 10 characters.</span>
+              </div>
+              <div class="form-group full">
+                <button type="submit" class="btn btn-primary" id="cfSubmit">Send Inquiry</button>
+                <p class="form-note" style="margin-top:10px">By submitting you agree to our <a href="privacy.html">privacy policy</a>. Submissions are sent to the management portal API; when offline they are stored in your browser.</p>
+              </div>
+            </div>
+          </form>
+        </div>
+        <!-- Contact details -->
+        <div class="reveal">
+          <span class="eyebrow">Reach us directly</span>
+          <h2 style="margin-bottom:22px">Office &amp; operations</h2>
+          <ul class="value-list" style="margin-top:0">
+            <li>
+              <span class="vi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
+              <div><h4>Office</h4><p>Bole Sub-city, Addis Ababa, Ethiopia<br><span class="form-note">Visits by appointment.</span></p></div>
+            </li>
+            <li>
+              <span class="vi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.08 4.18 2 2 0 0 1 4.07 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span>
+              <div><h4>Phone</h4><p><a href="tel:+251911000000">+251 911 000 000</a><br><span class="form-note">Operations desk, Mon–Sat 8:00–17:30</span></p></div>
+            </li>
+            <li>
+              <span class="vi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+              <div><h4>Email</h4><p><a href="mailto:info@primehorizon.et">info@primehorizon.et</a><br><a href="mailto:careers@primehorizon.et">careers@primehorizon.et</a></p></div>
+            </li>
+            <li>
+              <span class="vi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></span>
+              <div><h4>Hours</h4><p>Monday – Saturday, 8:00 – 17:30<br><span class="form-note">Emergency support for contract clients: 24/7</span></p></div>
+            </li>
+          </ul>
+          <div class="card" style="margin-top:26px">
+            <h3>Shareholder &amp; staff portal</h3>
+            <p style="margin-top:8px">Capital contributions, fleet records, projects and reports live in the management portal — not on this public site.</p>
+            <a href="portal.html" class="btn btn-outline btn-sm" style="margin-top:14px">Open Portal Login</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer data-site-footer></footer>
+  <script src="js/shell.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/contact.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/index.py": { "runtime": "python3.12" }
+  },
+  "buildCommand": "python backend/manage.py collectstatic --noinput",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index.py" },
+    { "source": "/css/:path*", "destination": "/website/css/:path*" },
+    { "source": "/js/:path*", "destination": "/website/js/:path*" },
+    { "source": "/portal", "destination": "/website/portal.html" },
+    { "source": "/about", "destination": "/website/about.html" },
+    { "source": "/services", "destination": "/website/services.html" },
+    { "source": "/fleet", "destination": "/website/fleet.html" },
+    { "source": "/projects", "destination": "/website/projects.html" },
+    { "source": "/careers", "destination": "/website/careers.html" },
+    { "source": "/contact", "destination": "/website/contact.html" },
+    { "source": "/privacy", "destination": "/website/privacy.html" },
+    { "source": "/terms", "destination": "/website/terms.html" },
+    { "source": "/:page.html", "destination": "/website/:page.html" },
+    { "source": "/", "destination": "/website/index.html" }
+  ]
+}

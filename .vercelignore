@@ -1,0 +1,8 @@
+# Keep the proposal source files and local dev artefacts out of the deployment.
+Business Proposal Development.docx
+Business Proposal Development.html
+Business Proposal Development_files
+~$*
+.env
+*.sqlite3
+__pycache__
