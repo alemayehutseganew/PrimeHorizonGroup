@@ -33,7 +33,7 @@ if _vercel_url:
     CORS_ALLOWED_ORIGINS.append(f"https://{_vercel_url}")
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-CORS_ALLOW_HEADERS = ["content-type", "authorization", "content-type"]
+CORS_ALLOW_HEADERS = ["content-type", "authorization", "content-length", "accept", "origin", "x-requested-with", "sec-fetch-mode", "sec-fetch-site", "user-agent", "cache-control"]
 
 
 # Applications ---------------------------------------------------------------
