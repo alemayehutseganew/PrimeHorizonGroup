@@ -3,9 +3,13 @@
 Mounted at BOTH /api/ and / so the portal works whether Vercel forwards
 the original path (/api/auth/token/) or the stripped path (/auth/token/).
 """
+import os
+
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from django.views.generic import TemplateView
+from django.views.static import serve
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -21,5 +25,8 @@ urlpatterns = [
     path("portal/", TemplateView.as_view(template_name="portal.html"), name="portal"),
     path("privacy/", TemplateView.as_view(template_name="privacy.html"), name="privacy"),
     path("terms/", TemplateView.as_view(template_name="terms.html"), name="terms"),
+    # Static assets served directly from website/ (Vercel Django ignores vercel.json rewrites)
+    path("static/css/<path:path>", serve, {"document_root": os.path.join(settings.BASE_DIR, "website", "css")}),
+    path("static/js/<path:path>", serve, {"document_root": os.path.join(settings.BASE_DIR, "website", "js")}),
     path("", include("core.urls")),
 ]
