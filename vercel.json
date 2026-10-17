@@ -8,10 +8,6 @@
   },
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/index?__phg_path=/:path*"
-    },
-    {
       "source": "/images/:path*",
       "destination": "/website/images/:path*"
     },
