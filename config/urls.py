@@ -26,7 +26,6 @@ urlpatterns = [
     path("privacy/", TemplateView.as_view(template_name="privacy.html"), name="privacy"),
     path("terms/", TemplateView.as_view(template_name="terms.html"), name="terms"),
     # Static assets served directly from website/ (Vercel Django ignores vercel.json rewrites)
-    path("static/css/<path:path>", serve, {"document_root": os.path.join(settings.BASE_DIR, "website", "css")}),
-    path("static/js/<path:path>", serve, {"document_root": os.path.join(settings.BASE_DIR, "website", "js")}),
+    path("static/<path:path>", serve, {"document_root": settings.BASE_DIR / "website"}),
     path("", include("core.urls")),
 ]
