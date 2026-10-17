@@ -2,9 +2,14 @@
 (function () {
   "use strict";
 
+  // Production: Vercel serves the Django app ONLY as the per-file function
+  // at /api/index (the router ignores rewrites whose destination is a
+  // function, so /api/auth/token/ 404s at the platform). Call the function
+  // at its native route and pass the real API path in __phg_path;
+  // api/index.py restores it as PATH_INFO before Django resolves the URL.
   var API_BASE = (location.hostname === "localhost" || location.hostname === "127.0.0.1")
     ? "http://127.0.0.1:8001/api"
-    : "/api";
+    : "/api/index?__phg_path=";
 
   var TOKEN_KEY = "phg_access_token";
   var ACCESS_TOKEN = null;
