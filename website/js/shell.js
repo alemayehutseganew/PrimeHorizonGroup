@@ -14,13 +14,13 @@
   }
 
   var NAV = [
-    ["index.html", "Home", "home"],
-    ["about.html", "About", "about"],
-    ["services.html", "Services", "services"],
-    ["fleet.html", "Fleet", "fleet"],
-    ["projects.html", "Projects", "projects"],
-    ["careers.html", "Careers", "careers"],
-    ["contact.html", "Contact", "contact"]
+    ["/", "Home", "home"],
+    ["/about", "About", "about"],
+    ["/services", "Services", "services"],
+    ["/fleet", "Fleet", "fleet"],
+    ["/projects", "Projects", "projects"],
+    ["/careers", "Careers", "careers"],
+    ["/contact", "Contact", "contact"]
   ];
 
   function navLinks() {
@@ -40,7 +40,7 @@
         '</div>' +
         '<div class="topbar-right">' +
           '<span>Addis Ababa, Ethiopia</span>' +
-          '<a href="portal.html">Shareholder &amp; Staff Login &#8594;</a>' +
+          '<a href="/portal">Shareholder &amp; Staff Login &#8594;</a>' +
         '</div>' +
       '</div>';
   }
@@ -50,15 +50,15 @@
     headerEl.className = "header";
     headerEl.innerHTML =
       '<div class="container">' +
-        '<a class="brand" href="index.html" aria-label="Prime Horizon Group home">' +
+        '<a class="brand" href="/" aria-label="Prime Horizon Group home">' +
           '<span class="brand-mark">' + logoSvg() + '</span>' +
           '<span><span class="brand-name">Prime Horizon Group</span><br>' +
           '<span class="brand-tag">Transport &amp; Technical Services</span></span>' +
         '</a>' +
         '<nav class="nav" id="mainNav" aria-label="Main navigation">' + navLinks() + '</nav>' +
         '<div class="header-cta">' +
-          '<a href="portal.html" class="btn btn-outline btn-sm">Client Login</a>' +
-          '<a href="contact.html" class="btn btn-primary btn-sm">Get a Quote</a>' +
+          '<a href="/portal" class="btn btn-outline btn-sm">Client Login</a>' +
+          '<a href="/contact" class="btn btn-primary btn-sm">Get a Quote</a>' +
           '<button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="mainNav">' +
             '<span></span><span></span><span></span>' +
           '</button>' +
@@ -77,7 +77,7 @@
       '<div class="container">' +
         '<div class="footer-grid">' +
           '<div class="footer-about">' +
-            '<a class="brand" href="index.html">' +
+            '<a class="brand" href="/">' +
               '<span class="brand-mark">' + logoSvg() + '</span>' +
               '<span><span class="brand-name">Prime Horizon Group</span><br>' +
               '<span class="brand-tag">Transport &amp; Technical Services</span></span>' +
@@ -85,17 +85,17 @@
             '<p>An Ethiopian transport and technical-services company built on transparent governance and disciplined delivery. Registered private limited company, Addis Ababa.</p>' +
           '</div>' +
           '<div><h4>Company</h4>' +
-            '<a href="about.html">About Us</a>' +
-            '<a href="projects.html">Projects</a>' +
-            '<a href="careers.html">Careers</a>' +
-            '<a href="contact.html">Contact</a>' +
+            '<a href="/about">About Us</a>' +
+            '<a href="/projects">Projects</a>' +
+            '<a href="/careers">Careers</a>' +
+            '<a href="/contact">Contact</a>' +
           '</div>' +
           '<div><h4>Services</h4>' +
-            '<a href="services.html">Transport &amp; Logistics</a>' +
-            '<a href="services.html">IT Support &amp; Systems</a>' +
-            '<a href="services.html">Software Development</a>' +
-            '<a href="services.html">Electrical &amp; Engineering</a>' +
-            '<a href="fleet.html">Fleet Services</a>' +
+            '<a href="/services">Transport &amp; Logistics</a>' +
+            '<a href="/services">IT Support &amp; Systems</a>' +
+            '<a href="/services">Software Development</a>' +
+            '<a href="/services">Electrical &amp; Engineering</a>' +
+            '<a href="/fleet">Fleet Services</a>' +
           '</div>' +
           '<div><h4>Contact</h4>' +
             '<ul class="footer-contact">' +
@@ -109,9 +109,9 @@
         '<div class="footer-bottom">' +
           '<span>&copy; <span id="year">2026</span> Prime Horizon Group Plc. All rights reserved.</span>' +
           '<span class="footer-legal">' +
-            '<a href="privacy.html">Privacy Policy</a>' +
-            '<a href="terms.html">Terms of Use</a>' +
-            '<a href="portal.html">Management Portal</a>' +
+            '<a href="/privacy">Privacy Policy</a>' +
+            '<a href="/terms">Terms of Use</a>' +
+            '<a href="/portal">Management Portal</a>' +
           '</span>' +
         '</div>' +
       '</div>';
