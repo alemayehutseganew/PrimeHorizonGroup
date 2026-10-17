@@ -14,14 +14,6 @@
     {
       "source": "/js/:path*",
       "destination": "/website/js/:path*"
-    },
-    {
-      "source": "/:page.html",
-      "destination": "/website/:page.html"
-    },
-    {
-      "source": "/",
-      "destination": "/website/index.html"
     }
   ]
 }
