@@ -1,6 +1,11 @@
 {
+  "functions": {
+    "api/index.py": "python"
+  },
   "buildCommand": "uv pip install -r requirements.txt --system && python backend/manage.py collectstatic --noinput",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/backend/config/wsgi.py" }
+    { "source": "/api/:path*", "destination": "/api/index.py" },
+    { "source": "/portal", "destination": "/website/portal.html" },
+    { "source": "/", "destination": "/website/index.html" }
   ]
 }
