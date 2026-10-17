@@ -14,11 +14,22 @@ from django.views.generic import TemplateView
 
 
 def static_asset(request, path):
-    """Serve static assets (CSS, JS, images) from website/ directory."""
-    # Resolve project root from this file's location: config/urls.py -> WEB/
-    project_root = Path(__file__).resolve().parent.parent
-    full_path = project_root / "website" / path
-    if not full_path.is_file():
+    """Serve static assets (CSS, JS, images) from website/ directory.
+
+    Tries multiple possible project roots because Vercel's serverless
+    filesystem may resolve __file__ differently than local dev.
+    """
+    candidate_roots = [
+        Path(__file__).resolve().parent.parent,  # config/urls.py -> WEB/
+        Path.cwd(),                              # current working directory
+    ]
+    full_path = None
+    for root in candidate_roots:
+        candidate = root / "website" / path
+        if candidate.is_file():
+            full_path = candidate
+            break
+    if full_path is None:
         raise Http404(f"Static asset not found: {path}")
     with open(full_path, "rb") as f:
         content = f.read()
