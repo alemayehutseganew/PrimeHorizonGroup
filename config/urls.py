@@ -4,6 +4,7 @@ Mounted at BOTH /api/ and / so the portal works whether Vercel forwards
 the original path (/api/auth/token/) or the stripped path (/auth/token/).
 """
 import os
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin
@@ -13,9 +14,11 @@ from django.views.generic import TemplateView
 
 
 def static_asset(request, path):
-    """Serve static assets (CSS, JS, images) from website/."""
-    full_path = os.path.join(settings.BASE_DIR, "website", path)
-    if not os.path.isfile(full_path):
+    """Serve static assets (CSS, JS, images) from website/ directory."""
+    # Resolve project root from this file's location: config/urls.py -> WEB/
+    project_root = Path(__file__).resolve().parent.parent
+    full_path = project_root / "website" / path
+    if not full_path.is_file():
         raise Http404(f"Static asset not found: {path}")
     with open(full_path, "rb") as f:
         content = f.read()
