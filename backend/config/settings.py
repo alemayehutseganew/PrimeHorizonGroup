@@ -24,6 +24,10 @@ if _vercel_url:
 ALLOWED_HOSTS = [
     h.strip() for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h.strip()
 ] or _default_hosts
+if os.environ.get("VERCEL"):
+    # Vercel sets VERCEL=1 in both build and runtime environments.
+    if ".vercel.app" not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(".vercel.app")
 
 _cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOWED_ORIGINS = [

@@ -1,12 +1,16 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pip install --break-system-packages -r requirements.txt && python backend/manage.py collectstatic --noinput",
+  "buildCommand": "pip install --break-system-packages -r requirements.txt && python backend/manage.py migrate --noinput && python backend/manage.py seed_demo && python backend/manage.py collectstatic --noinput",
   "functions": {
     "api/index.py": {
       "excludeFiles": "{__pycache__/**,**/__pycache__/**}"
     }
   },
   "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index"
+    },
     {
       "source": "/images/:path*",
       "destination": "/website/images/:path*"
