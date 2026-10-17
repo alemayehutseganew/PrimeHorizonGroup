@@ -8,6 +8,10 @@
   },
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "/api"
+    },
+    {
       "source": "/images/:path*",
       "destination": "/website/images/:path*"
     },
