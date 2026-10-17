@@ -4,6 +4,10 @@
   "buildCommand": "pip install --break-system-packages -r requirements.txt && python manage.py migrate --noinput && python manage.py seed_demo && python manage.py collectstatic --noinput",
   "rewrites": [
     {
+      "source": "/static/:path*",
+      "destination": "/website/:path*"
+    },
+    {
       "source": "/images/:path*",
       "destination": "/website/images/:path*"
     },
