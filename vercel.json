@@ -1,5 +1,11 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "pip install --break-system-packages -r requirements.txt && python backend/manage.py collectstatic --noinput",
   "rewrites": [
+    {
+      "source": "/api",
+      "destination": "/api/index"
+    },
     {
       "source": "/api/:path*",
       "destination": "/api/index"
