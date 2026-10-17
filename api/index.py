@@ -17,10 +17,8 @@ from pathlib import Path
 from urllib.parse import unquote
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-BACKEND_DIR = PROJECT_ROOT / "backend"
-
-# Make `backend/` importable as `config` / `core` packages live under it.
-sys.path.insert(0, str(BACKEND_DIR))
+# Repository root: `config` / `core` packages live here.
+sys.path.insert(0, str(PROJECT_ROOT))
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
