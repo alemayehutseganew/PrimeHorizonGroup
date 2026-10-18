@@ -96,7 +96,9 @@
         await PHG_API.login(email, pass);
         await PHG_API.hydrate();
         var me = await PHG_API.me();
-        session = { email: email, name: me.user.name, role: me.user.role, title: me.user.title };
+        var mu = me.user;
+        var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email;
+        session = { email: email, name: nm, role: mu.role, title: mu.title || mu.role };
         startApp();
       } catch (err2) {
         if (err2.status === 0) {

@@ -26,12 +26,16 @@ from .models import (
 
 class UserSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source="role_label", read_only=True)
+    name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = ["id", "email", "username", "first_name", "last_name",
-                  "role", "title", "phone", "status", "last_login"]
+                  "name", "role", "title", "phone", "status", "last_login"]
         read_only_fields = ["id", "last_login"]
+
+    def get_name(self, obj):
+        return obj.get_full_name() or obj.email
 
 
 class ShareholderSerializer(serializers.ModelSerializer):
