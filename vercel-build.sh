@@ -7,6 +7,11 @@ set -e
 python -c "import os; print('DBURL_PRESENT=' + str(bool(os.environ.get('DATABASE_URL'))))"
 
 pip install --break-system-packages -r requirements.txt
+# Vercel pre-installs deps with a different interpreter (3.14) while the app
+# runs on 3.12: pure-Python wheels survive that, but psycopg2-binary's compiled
+# extension does not ("No module named 'psycopg2._psycopg'"). Reinstall it for
+# the interpreter that actually runs this script and manage.py.
+python -m pip install --break-system-packages --force-reinstall --no-cache-dir --no-deps psycopg2-binary
 python manage.py migrate --noinput
 python manage.py seed_demo
 python manage.py collectstatic --noinput
