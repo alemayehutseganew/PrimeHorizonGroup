@@ -226,28 +226,41 @@
     };
   }
 
+  async function safeList(endpoint, adapt) {
+    try {
+      var r = await list(endpoint);
+      return r.map(adapt || function (x) { return x; });
+    } catch (e) {
+      // 403 = role not permitted for this section (expected for
+      // shareholders/auditors); 404 = endpoint missing. Either way the
+      // dashboard renders with the sections the user is allowed to see.
+      if (e && (e.status === 403 || e.status === 404)) return [];
+      throw e;
+    }
+  }
+
   /* Hydrate window.PHG_DATA from the live API. Returns {user, mode}. */
   async function hydrate() {
     var m = await me();
     var u = adaptUser(m.user);
     var fetched = await Promise.all([
-      list("shareholders").then(function (r) { return r.map(adaptShareholder); }),
-      list("contributions").then(function (r) { return r.map(adaptContribution); }),
-      list("vehicles").then(function (r) { return r.map(adaptVehicle); }),
-      list("drivers").then(function (r) { return r.map(adaptDriver); }),
-      list("trips").then(function (r) { return r.map(adaptTrip); }),
-      list("maintenance").then(function (r) { return r.map(adaptMaintenance); }),
-      list("projects").then(function (r) { return r.map(adaptProject); }),
-      list("tasks").then(function (r) { return r.map(adaptTask); }),
-      list("transactions").then(function (r) { return r.map(adaptTransaction); }),
-      list("invoices").then(function (r) { return r.map(adaptInvoice); }),
-      list("documents").then(function (r) { return r.map(adaptDocument); }),
-      list("meetings").then(function (r) { return r.map(adaptMeeting); }),
-      list("notifications").then(function (r) { return r.map(adaptNotification); }),
-      list("audit").then(function (r) { return r.map(function (a) {
+      safeList("shareholders", adaptShareholder),
+      safeList("contributions", adaptContribution),
+      safeList("vehicles", adaptVehicle),
+      safeList("drivers", adaptDriver),
+      safeList("trips", adaptTrip),
+      safeList("maintenance", adaptMaintenance),
+      safeList("projects", adaptProject),
+      safeList("tasks", adaptTask),
+      safeList("transactions", adaptTransaction),
+      safeList("invoices", adaptInvoice),
+      safeList("documents", adaptDocument),
+      safeList("meetings", adaptMeeting),
+      safeList("notifications", adaptNotification),
+      safeList("audit", function (a) {
         return { id: a.id, actor: a.actor, action: a.action, target: a.target, time: a.time, outcome: a.outcome };
-      }); }),
-      list("users").then(function (r) { return r.map(adaptUser); })
+      }),
+      safeList("users", adaptUser)
     ]);
     var PHG_DATA = window.PHG_DATA || {};
     PHG_DATA.shareholders = fetched[0];
