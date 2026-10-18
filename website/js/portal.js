@@ -95,9 +95,11 @@
       var token = null;
       try {
         token = await PHG_API.login(email, pass);
+        PHG_API.setMode("live");
         try { await PHG_API.hydrate(); } catch (hErr) {
           console.warn("hydrate partial failure (continuing):", hErr);
         }
+        D = window.PHG_DATA;
         var me = await PHG_API.me();
         var mu = me.user || {};
         var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || email;
@@ -134,7 +136,7 @@
   }
 
   function startApp() {
-    if (PHG_API.getMode() !== "offline") PHG_API.setMode("live");
+    PHG_API.setMode("live");
     var modeBadge = PHG_API.getMode() === "offline" ? ' <span style="font-size:0.72rem;color:#d97706">● OFFLINE</span>' : '';
     el("loginScreen").style.display = "none";
     el("portalShell").classList.add("active");
