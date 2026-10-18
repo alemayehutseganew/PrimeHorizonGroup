@@ -92,16 +92,21 @@
       var pass = el("loginPass").value;
       var err = el("loginError");
       err.classList.remove("show");
+      var token = null;
       try {
-        await PHG_API.login(email, pass);
-        await PHG_API.hydrate();
+        token = await PHG_API.login(email, pass);
+        try { await PHG_API.hydrate(); } catch (hErr) {
+          console.warn("hydrate partial failure (continuing):", hErr);
+        }
         var me = await PHG_API.me();
-        var mu = me.user;
-        var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email;
-        session = { email: email, name: nm, role: mu.role, title: mu.title || mu.role };
+        var mu = me.user || {};
+        var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || email;
+        session = { email: email, name: nm, role: mu.role || "shareholder", title: mu.title || mu.role || "" };
         startApp();
+        return;
       } catch (err2) {
-        if (err2.status === 0) {
+        console.error("login pipeline error:", err2);
+        if (!token && err2 && err2.status === 0) {
           var acct = ACCOUNTS[email];
           if (acct && acct.password === pass) {
             PHG_API.setMode("offline");
@@ -111,7 +116,9 @@
           }
           err.textContent = "API unreachable and no matching demo account.";
         } else {
-          err.textContent = err2.body && err2.body.detail ? err2.body.detail : "Login failed.";
+          var d = err2 && err2.body && (err2.body.detail || err2.body.email || err2.body.password);
+          err.textContent = d ? ("Login failed: " + d)
+            : ("Login failed: " + ((err2 && (err2.message || String(err2))) || "unknown error"));
         }
         err.classList.add("show");
       }
