@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pip install --break-system-packages -r requirements.txt && python manage.py migrate --noinput && python manage.py seed_demo && python manage.py collectstatic --noinput",
+  "buildCommand": "python -c \"import os;print('DBURL_PRESENT=' + str(bool(os.environ.get('DATABASE_URL'))))\" && pip install --break-system-packages -r requirements.txt && python manage.py migrate --noinput && python manage.py seed_demo && python manage.py collectstatic --noinput",
   "functions": {
     "api/index.py": {
       "excludeFiles": "{__pycache__/**,**/__pycache__/**,backend/**,test_*.py}"
