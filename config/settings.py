@@ -104,6 +104,15 @@ if _db_url:
         )
     }
 else:
+    if os.environ.get("VERCEL"):
+        # Loud, early failure instead of a silent read-only SQLite: on Vercel
+        # the bundled sqlite lives in the immutable /var/task bundle — reads
+        # work but every write fails with "attempt to write a readonly database".
+        raise RuntimeError(
+            "DATABASE_URL is not set. Production on Vercel requires a Postgres "
+            "(Neon) connection string — set DATABASE_URL in Project Settings -> "
+            "Environment Variables (value must start with postgresql://), then redeploy."
+        )
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
