@@ -116,6 +116,9 @@
   function postInquiry(payload) {
     return apiRequest("/inquiries/", { method: "POST", body: JSON.stringify(payload) });
   }
+  function postVehicle(payload) {
+    return apiRequest("/vehicles/", { method: "POST", body: JSON.stringify(payload) });
+  }
 
   function summary() {
     return apiRequest("/summary/", { method: "GET" });
@@ -286,7 +289,7 @@
   window.PHG_API = {
     login: login, logout: logout, me: me, list: list, summary: summary,
     approveContribution: approveContribution, rejectContribution: rejectContribution,
-    postInquiry: postInquiry, hydrate: hydrate, setMode: setMode, getMode: getMode,
+    postInquiry: postInquiry, postVehicle: postVehicle, hydrate: hydrate, setMode: setMode, getMode: getMode,
     baseUrl: baseUrl, getToken: function () { return ACCESS_TOKEN; }
   };
 })();

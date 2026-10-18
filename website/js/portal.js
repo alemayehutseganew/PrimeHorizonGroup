@@ -504,7 +504,59 @@
 
     content().innerHTML = html;
     var b = el("btnAddVeh");
-    if (b) b.addEventListener("click", function () { toast("Demo: vehicle form (registration, documents, photos) opens in the full application."); });
+    if (b) b.addEventListener("click", function () {
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Add Vehicle";
+      body.innerHTML = '<form id="addVehForm" style="display:grid;gap:10px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Plate</span><input name="plate" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Make</span><input name="make" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Model</span><input name="model" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Year</span><input name="year" type="number" min="1900" max="2030" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Category</span><input name="category" value="Pickup" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Driver</span><input name="driver" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Odometer (km)</span><input name="odometer" type="number" min="0" value="0" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Insurance until</span><input name="insurance_until" type="date" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Purchase cost (ETB)</span><input name="purchase_cost" type="number" min="0" step="any" value="0" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '</form>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Create Vehicle";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = async function () {
+        var fd = new FormData(el("addVehForm"));
+        var payload = {
+          plate: fd.get("plate"),
+          make: fd.get("make"),
+          model: fd.get("model"),
+          year: parseInt(fd.get("year"), 10),
+          category: fd.get("category") || "Pickup",
+          driver: fd.get("driver") || "—",
+          odometer: parseInt(fd.get("odometer"), 10) || 0,
+          insurance: fd.get("insurance_until") || null,
+          purchase: parseFloat(fd.get("purchase_cost")) || 0,
+          status: "Available"
+        };
+        try {
+          var created = await PHG_API.postVehicle(payload);
+          mb.style.display = "none";
+          toast("Vehicle " + (created.id || created.plate) + " added.");
+          var fresh = await PHG_API.safeList("vehicles", function (v) { return v; });
+          D.vehicles = fresh;
+          navigate("vehicles");
+        } catch (e) {
+          toast("Create failed: " + (e.body && (e.body.detail || e.body.plate || e.body.non_field_errors)) || String(e));
+        }
+      };
+      mb.style.display = "flex";
+    });
   };
 
   /* ---------- Trips ---------- */
