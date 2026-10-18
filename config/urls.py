@@ -15,7 +15,10 @@ urlpatterns = [
     path("about/", TemplateView.as_view(template_name="about.html"), name="about"),
     path("services/", TemplateView.as_view(template_name="services.html"), name="services"),
     path("fleet/", TemplateView.as_view(template_name="fleet.html"), name="fleet"),
-    path("projects/", TemplateView.as_view(template_name="projects.html"), name="projects"),
+    # NOTE: "/projects/" is intentionally NOT listed here — the portal's live
+    # data view depends on it resolving to the Project ViewSet via the root
+    # core.urls include below. The public /projects page is served directly
+    # by Vercel's static rewrite, so nothing is lost.
     path("careers/", TemplateView.as_view(template_name="careers.html"), name="careers"),
     path("contact/", TemplateView.as_view(template_name="contact.html"), name="contact"),
     path("portal/", TemplateView.as_view(template_name="portal.html"), name="portal"),
