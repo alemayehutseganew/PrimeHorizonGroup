@@ -90,9 +90,17 @@ TEMPLATES = [
 # Database -------------------------------------------------------------------
 _db_url = os.environ.get("DATABASE_URL", "").strip()
 if _db_url:
+    # Serverless (Vercel): never reuse connections across invocations —
+    # a pooled connection held warm between requests goes stale and the
+    # next write fails with a 500 while reads still succeed.
+    # conn_max_age=0 closes each connection after its request.
+    # Pair with Neon's UNPOOLED connection string for full Django compat.
     DATABASES = {
         "default": dj_database_url.parse(
-            _db_url, conn_max_age=600, conn_health_checks=True, ssl_require=True
+            _db_url,
+            conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "0")),
+            conn_health_checks=True,
+            ssl_require=True,
         )
     }
 else:
