@@ -12,19 +12,34 @@
     : "/api/index?__phg_path=";
 
   var TOKEN_KEY = "phg_access_token";
-  var ACCESS_TOKEN = null;
-  var apiMode = "offline";
+  var REFRESH_KEY = "phg_refresh_token";
 
-  function getToken() {
-    try { return sessionStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+  function getStored(key) {
+    try { return sessionStorage.getItem(key); } catch (e) { return null; }
   }
-  function setToken(t) {
-    try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {}
-    ACCESS_TOKEN = t;
+  // FIX: restore persisted session at startup. Previously ACCESS_TOKEN
+  // stayed null after refresh, forcing 401s until next login.
+  var ACCESS_TOKEN = getStored(TOKEN_KEY);
+  var REFRESH_TOKEN = getStored(REFRESH_KEY);
+  var apiMode = ACCESS_TOKEN ? "live" : "offline";
+
+  function getToken() { return ACCESS_TOKEN || getStored(TOKEN_KEY); }
+  function setToken(t, refresh) {
+    ACCESS_TOKEN = t || null;
+    try {
+      if (t) sessionStorage.setItem(TOKEN_KEY, t);
+      else sessionStorage.removeItem(TOKEN_KEY);
+      if (refresh !== undefined) {
+        if (refresh) sessionStorage.setItem(REFRESH_KEY, refresh);
+        else sessionStorage.removeItem(REFRESH_KEY);
+      }
+    } catch (e) {}
+    if (refresh !== undefined) REFRESH_TOKEN = refresh || null;
   }
   function clearToken() {
+    ACCESS_TOKEN = null; REFRESH_TOKEN = null;
     try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) {}
-    ACCESS_TOKEN = null;
+    try { sessionStorage.removeItem(REFRESH_KEY); } catch (e) {}
   }
 
   function unwrap(data) {
@@ -32,28 +47,71 @@
     return data;
   }
 
-  function headers(extra) {
-    var h = { "Content-Type": "application/json" };
-    if (ACCESS_TOKEN) h["Authorization"] = "Bearer " + ACCESS_TOKEN;
+  function headers(extra, noBody) {
+    var h = {};
+    var token = ACCESS_TOKEN || getStored(TOKEN_KEY);
+    if (token) h["Authorization"] = "Bearer " + token;
+    // FIX: never send JSON Content-Type on bodyless GET/DELETE/HEAD;
+    // FormData uploads need browser-generated multipart boundary.
+    if (!noBody) h["Content-Type"] = "application/json";
     if (extra) for (var k in extra) h[k] = extra[k];
     return h;
   }
 
+  async function rawFetch(url, opts) {
+    var res = await fetch(url, opts);
+    if (res.status === 204) return null;
+    var ct = res.headers.get("content-type") || "";
+    var payload = null;
+    try {
+      payload = ct.indexOf("application/json") !== -1
+        ? await res.json() : await res.text();
+    } catch (_) { payload = { detail: "HTTP " + res.status }; }
+    if (!res.ok) throw { status: res.status, body: payload };
+    return payload;
+  }
+
+  async function tryRefresh() {
+    var rt = REFRESH_TOKEN || getStored(REFRESH_KEY);
+    if (!rt) return false;
+    try {
+      var base = API_BASE;
+      var url = base + "/auth/token/refresh/";
+      var res = await fetch(url, { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh: rt }) });
+      if (!res.ok) { clearToken(); return false; }
+      var data = await res.json();
+      if (data.access) { setToken(data.access, data.refresh || rt); return true; }
+    } catch (_) {}
+    clearToken(); return false;
+  }
+
   async function apiRequest(path, opts) {
     opts = opts || {};
+    var method = (opts.method || "GET").toUpperCase();
+    var hasBody = opts.body !== undefined && method !== "GET" && method !== "HEAD";
     var url = API_BASE + path;
-    if (!opts.headers) opts.headers = {};
-    for (var k in headers()) opts.headers[k] = headers()[k];
+    var reqHeaders = headers(opts.headers, !hasBody);
+    if (opts.body && typeof opts.body !== "string"
+        && !((typeof FormData !== "undefined") && (opts.body instanceof FormData))) {
+      opts.body = JSON.stringify(opts.body);
+    }
+    // Drop JSON content-type if body is FormData (browser sets boundary).
+    if ((typeof FormData !== "undefined") && (opts.body instanceof FormData)) {
+      delete reqHeaders["Content-Type"];
+    }
     try {
-      var res = await fetch(url, opts);
-      if (!res.ok) {
-        var err;
-        try { err = await res.json(); } catch (_) { err = { detail: "HTTP " + res.status }; }
-        throw { status: res.status, body: err };
+      try {
+        return await rawFetch(url, { method: method, headers: reqHeaders,
+          body: hasBody ? opts.body : undefined, credentials: "same-origin" });
+      } catch (err) {
+        if (err && err.status === 401 && !opts._retried) {
+          opts._retried = true;
+          if (await tryRefresh()) return apiRequest(path, opts);
+        }
+        throw err;
       }
-      var ct = res.headers.get("content-type") || "";
-      if (ct.indexOf("application/json") !== -1) return await res.json();
-      return await res.text();
     } catch (err) {
       if (err && err.status !== undefined) throw err;
       throw { status: 0, body: { detail: "Network unreachable — is the API running?" } };
@@ -63,10 +121,11 @@
   /* ---------- Auth ---------- */
   async function login(email, password) {
     var data = await apiRequest("/auth/token/", {
-      method: "POST", body: JSON.stringify({ email: email.toLowerCase(), password: password })
+      method: "POST", body: { email: email.toLowerCase(), password: password }
     });
     var access = data.access;
-    setToken(access);
+    setToken(access, data.refresh || null);
+    apiMode = "live";
     return access;
   }
 
@@ -85,6 +144,7 @@
     meetings: "/meetings/",
     customers: "/customers/",
     leads: "/leads/",
+    inquiries: "/inquiries/",
     vehicles: "/vehicles/",
     drivers: "/drivers/",
     trips: "/trips/",
@@ -93,6 +153,7 @@
     tasks: "/tasks/",
     transactions: "/transactions/",
     invoices: "/invoices/",
+    payments: "/payments/",
     documents: "/documents/",
     notifications: "/notifications/",
     audit: "/audit/",
@@ -118,6 +179,20 @@
   }
   function postVehicle(payload) {
     return apiRequest("/vehicles/", { method: "POST", body: JSON.stringify(payload) });
+  }
+
+  /* ---------- Generic CRUD ---------- */
+  function create(endpoint, payload) {
+    var url = ENDPOINTS[endpoint] || endpoint;
+    return apiRequest(url, { method: "POST", body: JSON.stringify(payload) });
+  }
+  function update(endpoint, code, payload) {
+    var url = ENDPOINTS[endpoint] || endpoint;
+    return apiRequest(url + encodeURIComponent(code) + "/", { method: "PATCH", body: JSON.stringify(payload) });
+  }
+  function del(endpoint, code) {
+    var url = ENDPOINTS[endpoint] || endpoint;
+    return apiRequest(url + encodeURIComponent(code) + "/", { method: "DELETE" });
   }
 
   function summary() {
@@ -213,6 +288,20 @@
       status: m.status, summary: m.summary || ""
     };
   }
+  function adaptCustomer(c) {
+    return {
+      id: c.id, name: c.name, contact: c.contact || "",
+      phone: c.phone || "", category: c.category || "",
+      status: c.status || "Active"
+    };
+  }
+  function adaptLead(l) {
+    return {
+      id: l.id, source: l.source || "", service: l.service || "",
+      value: num(l.value), assignee: l.assignee || "",
+      stage: l.stage || "New", follow: l.follow || ""
+    };
+  }
   function adaptNotification(n) {
     return {
       id: n.id, text: n.text, time: n.time,
@@ -263,7 +352,11 @@
       safeList("audit", function (a) {
         return { id: a.id, actor: a.actor, action: a.action, target: a.target, time: a.time, outcome: a.outcome };
       }),
-      safeList("users", adaptUser)
+      safeList("users", adaptUser),
+      // FIX §7.1: customers & leads were never hydrated — the CRM view
+      // rendered an empty pipeline even when the API had rows.
+      safeList("customers", adaptCustomer),
+      safeList("leads", adaptLead)
     ]);
     var PHG_DATA = window.PHG_DATA || {};
     PHG_DATA.shareholders = fetched[0];
@@ -281,6 +374,8 @@
     PHG_DATA.notifications = fetched[12];
     PHG_DATA.auditLog = fetched[13];
     PHG_DATA.users = fetched[14];
+    PHG_DATA.customers = fetched[15];
+    PHG_DATA.leads = fetched[16];
     PHG_DATA.sharePrice = m.share_price || 250000;
     window.PHG_DATA = PHG_DATA;
     return { user: u, mode: "live" };
@@ -289,8 +384,10 @@
   window.PHG_API = {
     login: login, logout: logout, me: me, list: list, summary: summary,
     approveContribution: approveContribution, rejectContribution: rejectContribution,
-    postInquiry: postInquiry, postVehicle: postVehicle, hydrate: hydrate, setMode: setMode, getMode: getMode,
-    baseUrl: baseUrl, getToken: function () { return ACCESS_TOKEN; }
+    postInquiry: postInquiry, postVehicle: postVehicle,
+    create: create, update: update, del: del,
+    hydrate: hydrate, setMode: setMode, getMode: getMode,
+    baseUrl: baseUrl, getToken: function () { return ACCESS_TOKEN || getStored(TOKEN_KEY); }
   };
 })();
 

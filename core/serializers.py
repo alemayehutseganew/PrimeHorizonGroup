@@ -1,4 +1,7 @@
 """DRF serializers — field names match the frontend data.js shape."""
+from datetime import date as _date
+from datetime import datetime as _datetime
+
 from rest_framework import serializers
 
 from .models import (
@@ -24,24 +27,65 @@ from .models import (
 )
 
 
+class TolerantDateField(serializers.DateField):
+    """Accept model DateFields whose in-memory default is timezone.now().
+
+    A freshly created instance holds a datetime until refresh_from_db();
+    DRF's stock DateField refuses to serialize datetimes, which 500'd
+    POST /shareholders/ immediately after a successful save.
+    """
+
+    def to_representation(self, value):
+        if isinstance(value, _datetime):
+            value = value.date()
+        return super().to_representation(value)
+
+
 class UserSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source="role_label", read_only=True)
     name = serializers.SerializerMethodField()
+    password = serializers.CharField(write_only=True, required=False,
+                                     min_length=8)
 
     class Meta:
         model = User
         fields = ["id", "email", "username", "first_name", "last_name",
-                  "name", "role", "title", "phone", "status", "last_login"]
+                  "name", "role", "title", "phone", "status", "last_login",
+                  "password"]
         read_only_fields = ["id", "last_login"]
+        extra_kwargs = {
+            # §9: never allow self-elevation or unsafe public assignment.
+            # Role/status are writable only via the admin-only UserViewSet;
+            # both are enforced again in perform_create/perform_update.
+            "role": {"required": False},
+            "status": {"required": False},
+        }
 
     def get_name(self, obj):
         return obj.get_full_name() or obj.email
+
+    def create(self, validated_data):
+        password = validated_data.pop("password", None)
+        user = User(**validated_data)
+        user.set_password(password or User.objects.make_random_password())
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
 
 
 class ShareholderSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="code", read_only=True)
     name = serializers.CharField(source="legal_name")
-    joined = serializers.DateField(source="admitted_on")
+    # TolerantDateField: admitted_on defaults to timezone.now (datetime).
+    joined = TolerantDateField(source="admitted_on", required=False)
     commitment = serializers.DecimalField(max_digits=14, decimal_places=2,
                                           read_only=True)
     outstanding = serializers.DecimalField(max_digits=14, decimal_places=2,
@@ -57,19 +101,29 @@ class ShareholderSerializer(serializers.ModelSerializer):
 class ContributionSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="code", read_only=True)
     sh = serializers.CharField(source="shareholder.code", read_only=True)
-    shareholder_id = serializers.PrimaryKeyRelatedField(
-        queryset=Shareholder.objects.all(), source="shareholder",
-        write_only=True, required=False,
+    shareholder_code = serializers.CharField(
+        source="shareholder", write_only=True,
     )
     date = serializers.DateField(source="paid_on")
-    ref = serializers.CharField(source="reference")
+    ref = serializers.CharField(source="reference", required=False, allow_blank=True)
     by = serializers.SerializerMethodField()
 
     class Meta:
         model = Contribution
-        fields = ["id", "sh", "shareholder_id", "amount", "currency", "kind",
+        fields = ["id", "sh", "shareholder_code", "amount", "currency", "kind",
                   "date", "method", "ref", "status", "by",
                   "evidence_note", "decision_note"]
+
+    def validate_shareholder_code(self, value):
+        try:
+            return Shareholder.objects.get(code=value)
+        except Shareholder.DoesNotExist:
+            raise serializers.ValidationError("Unknown shareholder code: " + value)
+
+    def create(self, validated_data):
+        # With source="shareholder", validated_data["shareholder"] is already
+        # the resolved Shareholder instance from validate_shareholder_code.
+        return super().create(validated_data)
 
     def get_by(self, obj):
         if obj.decided_by:
@@ -211,9 +265,9 @@ class TaskSerializer(serializers.ModelSerializer):
 
 class TransactionSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="code", read_only=True)
-    date = serializers.DateField(source="txn_date")
+    date = serializers.DateField(source="txn_date", required=False)
     type = serializers.CharField(source="kind")
-    ref = serializers.CharField(source="reference")
+    ref = serializers.CharField(source="reference", required=False, allow_blank=True)
 
     class Meta:
         model = Transaction
@@ -265,10 +319,11 @@ class NotificationSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(read_only=True)
     time = serializers.SerializerMethodField()
     unread = serializers.SerializerMethodField()
+    is_read = serializers.BooleanField(required=False)
 
     class Meta:
         model = Notification
-        fields = ["id", "text", "time", "unread", "target"]
+        fields = ["id", "text", "time", "unread", "is_read", "target"]
 
     def get_time(self, obj):
         return obj.created_at.strftime("%Y-%m-%d %H:%M")

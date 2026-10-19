@@ -69,12 +69,15 @@
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%; justify-content:center; padding:12px">Sign In</button>
           <p style="font-size:0.78rem; color:var(--text-muted); margin-top:12px; text-align:center">
-            <a href="#" onclick="alert('Demo: password reset sends a time-limited, single-use link.'); return false;">Forgot password?</a>
+            <a href="#" onclick="alert('Password reset is unavailable in this build — contact your administrator.'); return false;">Forgot password?</a>
             · <a href="/">Back to website</a>
           </p>
         </form>
-        <div class="demo-accounts">
-          <div class="da-title">Demo accounts — password: demo1234</div>
+        <!-- Demo accounts are injected by portal.js ONLY on localhost. They
+             are never rendered in production (no seeded demo users exist
+             there), so no valid credential is ever advertised. -->
+        <div class="demo-accounts" id="demoAccounts" hidden>
+          <div class="da-title">Development accounts (localhost only)</div>
           <div class="da-grid">
             <button class="demo-chip" data-email="gm@primehorizon.et">General Manager</button>
             <button class="demo-chip" data-email="finance@primehorizon.et">Finance Officer</button>

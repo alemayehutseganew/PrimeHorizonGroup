@@ -14,7 +14,11 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-local-dev-only-change-me")
+if os.environ.get("VERCEL") and SECRET_KEY.startswith("django-insecure-"):
+    raise RuntimeError("SECRET_KEY must be set to a long random value in Vercel env.")
 DEBUG = os.environ.get("DEBUG", "True").lower() in ("1", "true", "yes")
+if os.environ.get("VERCEL") and DEBUG:
+    raise RuntimeError("DEBUG must be False on Vercel production.")
 
 # Hosts / origins -----------------------------------------------------------
 _default_hosts = ["127.0.0.1", "localhost"]

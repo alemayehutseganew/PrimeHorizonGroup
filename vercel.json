@@ -30,6 +30,14 @@
       "destination": "/api/index.py?__phg_path=/:path*"
     },
     {
+      "source": "/admin/:path*",
+      "destination": "/api/index.py?__phg_path=/admin/:path*"
+    },
+    {
+      "source": "/static/admin/:path*",
+      "destination": "/api/index.py?__phg_path=/static/admin/:path*"
+    },
+    {
       "source": "/static/css/:path*",
       "destination": "/website/css/:path*"
     },

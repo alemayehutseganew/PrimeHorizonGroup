@@ -40,6 +40,16 @@ class User(AbstractUser):
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
 
+    @property
+    def role_label(self):
+        # FIX: UserSerializer exposes `title` from `role_label`, but the
+        # property did not exist — every /auth/me/ + hydrate() call crashed
+        # with AttributeError, breaking login/profile on all roles.
+        try:
+            return self.get_role_display()
+        except Exception:
+            return self.role or ""
+
     def __str__(self):
         return f"{self.get_full_name() or self.email} ({self.get_role_display()})"
 

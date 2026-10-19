@@ -7,16 +7,6 @@
 
   var D = window.PHG_DATA;
 
-  /* ---------- Demo accounts ---------- */
-  var ACCOUNTS = {
-    "gm@primehorizon.et":        { password: "demo1234", name: "Ato Samuel Girma",   role: "gm",         title: "General Manager" },
-    "finance@primehorizon.et":   { password: "demo1234", name: "W/ro Hanna Tesfaye", role: "finance",    title: "Finance Officer" },
-    "transport@primehorizon.et": { password: "demo1234", name: "Ato Dawit Bekele",   role: "transport",  title: "Transport Manager" },
-    "projects@primehorizon.et":  { password: "demo1234", name: "Ato Nahom Fikru",    role: "projects",   title: "Technical Project Manager" },
-    "admin@primehorizon.et":     { password: "demo1234", name: "IT Administrator",   role: "admin",      title: "System Administrator" },
-    "yonas@primehorizon.et":     { password: "demo1234", name: "Ato Yonas Alemu",    role: "shareholder",title: "Shareholder" }
-  };
-
   /* ---------- Role → allowed views ---------- */
   var ROLE_VIEWS = {
     gm:         ["dashboard","shareholders","contributions","leads","vehicles","drivers","trips","maintenance","projects","tasks","finance","invoices","documents","meetings","reports","notifications","audit","users","settings"],
@@ -52,16 +42,94 @@
   var session = null;
   var pollTimer;
   var currentView = "dashboard";
-  var notifications = D.notifications.slice();
+  var dataReady = false;
+  // Notifications mirror the hydrated PHG_DATA copy once live data arrives.
+  var notifications = [];
 
   /* ---------- Utilities ---------- */
   function fmtETB(n) {
     return "ETB " + Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
   }
   function el(id) { return document.getElementById(id); }
+  function data() {
+    // Always read the current hydrated store; D may be replaced on login.
+    return window.PHG_DATA || D || {};
+  }
+  function syncNotifications() {
+    var src = data().notifications;
+    notifications = Array.isArray(src) ? src.slice() : [];
+    updateBell();
+  }
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
       return { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c];
+    });
+  }
+  function apiError(e) {
+    if (!e) return "Unknown error";
+    if (e.status === 0) return "Network unreachable — is the API running?";
+    if (e.status === 401) return "Session expired — please sign in again.";
+    if (e.body && typeof e.body === "object") {
+      if (e.body.detail) return e.body.detail;
+      var bits = [];
+      for (var k in e.body) {
+        var v = e.body[k];
+        bits.push(k + ": " + (Array.isArray(v) ? v.join(", ") : v));
+      }
+      return bits.join("; ") || ("HTTP " + e.status);
+    }
+    return String(e.body || ("HTTP " + (e.status || "error")));
+  }
+  // §7.2/§7.3 helper: generic modal create-form that POSTs real data.
+  // No demo fallback — validation errors stay on the form (§7.2).
+  function openFormModal(title, fields, onSubmit) {
+    var ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.style.cssText = "position:fixed;inset:0;background:rgba(16,41,74,.5);display:flex;align-items:center;justify-content:center;z-index:200;";
+    var inputs = fields.map(function (f, i) {
+      return '<label style="display:block;margin:8px 0;font-size:.85rem">' + esc(f.label) +
+        '<input data-f="' + i + '" type="text" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #cbd5e1;border-radius:8px" /></label>';
+    }).join("");
+    ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:20px;min-width:320px;max-width:440px">' +
+      "<h3 style='margin:0 0 8px'>" + esc(title) + "</h3>" +
+      '<div class="ferr" style="display:none;color:#b91c1c;font-size:.82rem;margin-bottom:6px"></div>' +
+      inputs +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">' +
+      '<button class="btn btn-outline" data-x="cancel">Cancel</button>' +
+      '<button class="btn btn-primary" data-x="save">Save</button></div></div>';
+    document.body.appendChild(ov);
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    ov.querySelector('[data-x="cancel"]').addEventListener("click", close);
+    ov.addEventListener("click", function (ev) { if (ev.target === ov) close(); });
+    ov.querySelector('[data-x="save"]').addEventListener("click", function () {
+      var vals = {};
+      fields.forEach(function (f, i) {
+        vals[f.name] = ov.querySelector('[data-f="' + i + '"]').value.trim();
+        if (f.required && !vals[f.name]) vals.__missing = f.label;
+      });
+      var ferr = ov.querySelector(".ferr");
+      if (vals.__missing) {
+        ferr.style.display = "block";
+        ferr.textContent = vals.__missing + " is required.";
+        return;
+      }
+      ferr.style.display = "none";
+      onSubmit(vals, function (errMsg) {
+        if (errMsg) { ferr.style.display = "block"; ferr.textContent = errMsg; }
+        else close();
+      });
+    });
+  }
+  function refreshLiveData() {
+    // Re-fetch live rows then re-render current view (§7.2–7.4).
+    if (!window.PHG_API || !PHG_API.hydrate) { navigate(currentView); return; }
+    PHG_API.hydrate().then(function () {
+      if (window.PHG_DATA) D = window.PHG_DATA;
+      syncNotifications();
+      navigate(currentView);
+    }).catch(function (err) {
+      toast("Refresh failed: " + apiError(err) + " — showing last loaded data.");
+      navigate(currentView);
     });
   }
   function badgeFor(status) {
@@ -84,7 +152,31 @@
     return session && ROLE_VIEWS[session.role].indexOf(view) !== -1;
   }
   /* ---------- Login ---------- */
+  async function tryRestoreSession() {
+    // FIX §6.1/§9: restore token-auth session on reload so protected API
+    // calls succeed without forcing a fresh login every refresh.
+    var token = null;
+    try { token = window.PHG_API && PHG_API.getToken ? PHG_API.getToken() : null; } catch (e) {}
+    if (!token) return false;
+    try {
+      try { await PHG_API.hydrate(); } catch (hErr) {
+        console.warn("hydrate partial failure (continuing):", hErr);
+      }
+      D = window.PHG_DATA;
+      var me = await PHG_API.me();
+      var mu = (me && me.user) || {};
+      var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || "";
+      session = { email: mu.email || "", name: nm, role: mu.role || "shareholder", title: mu.title || mu.role || "" };
+      startApp();
+      return true;
+    } catch (e) {
+      try { PHG_API.logout(); } catch (_) {}
+      return false;
+    }
+  }
   function initLogin() {
+    // Attempt silent restore first (same login pipeline, no credentials).
+    tryRestoreSession().catch(function () {});
     var form = el("loginForm");
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
@@ -108,25 +200,19 @@
         return;
       } catch (err2) {
         console.error("login pipeline error:", err2);
-        if (!token && err2 && err2.status === 0) {
-          var acct = ACCOUNTS[email];
-          if (acct && acct.password === pass) {
-            PHG_API.setMode("offline");
-            session = { email: email, name: acct.name, role: acct.role, title: acct.title };
-            startApp();
-            return;
-          }
-          err.textContent = "API unreachable and no matching demo account.";
-        } else {
-          var d = err2 && err2.body && (err2.body.detail || err2.body.email || err2.body.password);
-          err.textContent = d ? ("Login failed: " + d)
-            : ("Login failed: " + ((err2 && (err2.message || String(err2))) || "unknown error"));
-        }
+        var d = err2 && err2.body && (err2.body.detail || err2.body.email || err2.body.password);
+        err.textContent = d ? ("Login failed: " + d)
+          : ("Login failed: " + ((err2 && (err2.message || String(err2))) || "unknown error"));
         err.classList.add("show");
       }
     });
 
-    document.querySelectorAll(".demo-chip").forEach(function (chip) {
+    // Dev quick-login chips: localhost only. In production the
+    // #demoAccounts block stays hidden so no credential is advertised.
+    var isLocalHost = /^(localhost|127\.0\.0\.1)$/.test(location.hostname || "");
+    var daBox = document.getElementById("demoAccounts");
+    if (daBox && isLocalHost) daBox.hidden = false;
+    if (isLocalHost) document.querySelectorAll(".demo-chip").forEach(function (chip) {
       chip.addEventListener("click", function () {
         el("loginEmail").value = chip.getAttribute("data-email");
         el("loginPass").value = "demo1234";
@@ -136,6 +222,9 @@
   }
 
   function startApp() {
+    // FIX: re-point module cache at hydrated store + restore notifications.
+    D = window.PHG_DATA || D;
+    syncNotifications();
     PHG_API.setMode("live");
     var modeBadge = PHG_API.getMode() === "offline" ? ' <span style="font-size:0.72rem;color:#d97706">● OFFLINE</span>' : '';
     el("loginScreen").style.display = "none";
@@ -444,33 +533,71 @@
       btn.addEventListener("click", function () {
         var id = btn.getAttribute("data-approve");
         confirmModal("Approve contribution", "Approve " + id + "? This updates paid-in capital and is recorded in the audit log.", function () {
-          var c = D.contributions.filter(function (x) { return x.id === id; })[0];
-          if (!c || c.status === "Approved") return;
-          c.status = "Approved";
-          var sh = D.shareholders.filter(function (s) { return s.id === c.sh; })[0];
-          if (sh) sh.paid += c.amount;
-          pushAudit("Approved contribution " + id, id, "Success");
-          toast(id + " approved and added to paid-in capital.", "success");
-          navigate("contributions");
+          PHG_API.approveContribution(id).then(function () {
+            toast(id + " approved. Paid-in capital updated.", "success");
+            navigate("contributions");
+          }).catch(function (e) {
+            toast("Approve failed: " + apiError(e), "error");
+          });
         });
       });
     });
     content().querySelectorAll("[data-reject]").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var id = btn.getAttribute("data-reject");
-        confirmModal("Reject contribution", "Rejecting " + id + " requires a recorded reason in production. Reject this record?", function () {
-          var c = D.contributions.filter(function (x) { return x.id === id; })[0];
-          if (!c) return;
-          c.status = "Cancelled";
-          pushAudit("Rejected contribution " + id + " (reason recorded)", id, "Success");
-          toast(id + " rejected. Reason recorded in audit log.", "error");
-          navigate("contributions");
+        confirmModal("Reject contribution", "Rejecting " + id + " requires a recorded reason. Enter a reason below.", function () {
+          var note = prompt("Reason for rejection:", "");
+          if (note === null) return;
+          PHG_API.rejectContribution(id, note).then(function () {
+            toast(id + " rejected. Reason recorded in audit log.", "error");
+            navigate("contributions");
+          }).catch(function (e) {
+            toast("Reject failed: " + apiError(e), "error");
+          });
         });
       });
     });
     var addBtn = el("btnAddCT");
     if (addBtn) addBtn.addEventListener("click", function () {
-      toast("Demo: the contribution form opens in the full application (validated client-side and server-side).");
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Record Contribution";
+      body.innerHTML = '<form id="addCtForm" style="display:grid;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Shareholder code (e.g. SH-001)</span><input name="shareholder_code" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Amount (ETB)</span><input name="amount" type="number" min="1" step="any" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Date</span><input name="paid_on" type="date" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Reference</span><input name="reference" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Method</span><input name="method" value="Bank transfer" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</form>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Record Contribution";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = async function () {
+        var fd = new FormData(el("addCtForm"));
+        var shCode = fd.get("shareholder_code");
+        var sh = D.shareholders.filter(function (s) { return s.id === shCode; })[0];
+        if (!sh) { toast("Unknown shareholder code: " + shCode, "error"); return; }
+        var payload = {
+          shareholder_code: shCode,
+          amount: parseFloat(fd.get("amount")) || 0,
+          currency: "ETB",
+          kind: "Share capital",
+          date: fd.get("paid_on") || new Date().toISOString().slice(0, 10),
+          method: fd.get("method") || "Bank transfer",
+          ref: fd.get("reference") || ""
+        };
+        try {
+          var created = await PHG_API.create("contributions", payload);
+          mb.style.display = "none";
+          toast("Contribution " + (created.id || created.sh) + " recorded (pending approval).", "success");
+          navigate("contributions");
+        } catch (e) {
+          toast("Create failed: " + apiError(e), "error");
+        }
+      };
+      mb.style.display = "flex";
     });
   };
   /* ---------- Vehicles ---------- */
@@ -548,11 +675,9 @@
           var created = await PHG_API.postVehicle(payload);
           mb.style.display = "none";
           toast("Vehicle " + (created.id || created.plate) + " added.");
-          var fresh = await PHG_API.safeList("vehicles", function (v) { return v; });
-          D.vehicles = fresh;
-          navigate("vehicles");
+          refreshLiveData();
         } catch (e) {
-          toast("Create failed: " + (e.body && (e.body.detail || e.body.plate || e.body.non_field_errors)) || String(e));
+          toast("Create failed: " + apiError(e));
         }
       };
       mb.style.display = "flex";
@@ -588,7 +713,21 @@
 
     content().innerHTML = html;
     var b = el("btnAddTrip");
-    if (b) b.addEventListener("click", function () { toast("Demo: trip booking form checks vehicle availability and driver licence validity."); });
+    if (b) b.addEventListener("click", function () {
+      // §7.2: real POST /trips/ — no demo fallback.
+      openFormModal("Book Trip", [
+        { name: "customer", label: "Customer", required: true },
+        { name: "route", label: "Route", required: true },
+        { name: "start", label: "Start date (YYYY-MM-DD)", required: true },
+        { name: "end", label: "End date (YYYY-MM-DD)", required: true }
+      ], function (vals, done) {
+        PHG_API.create("trips", {
+          customer_name: vals.customer, route: vals.route,
+          start_date: vals.start, end_date: vals.end, status: "Booked"
+        }).then(function () { done(); toast("Trip booked."); refreshLiveData(); })
+          .catch(function (e) { done("Create failed: " + apiError(e)); });
+      });
+    });
   };
 
   /* ---------- Maintenance ---------- */
@@ -642,8 +781,21 @@
       "</tr></thead><tbody>" + rows + "</tbody></table></div>", "", true);
 
     content().innerHTML = html;
-    var b = el("btnAddDriver");
-    if (b) b.addEventListener("click", function () { toast("Demo: driver form captures licence, medical status and trip history."); });
+    var bd = el("btnAddDriver");
+    if (bd) bd.addEventListener("click", function () {
+      // §7.2: real POST /drivers/ — no demo fallback.
+      openFormModal("Add Driver", [
+        { name: "name", label: "Full name", required: true },
+        { name: "licence", label: "Licence class (e.g. C)", required: true },
+        { name: "phone", label: "Phone", required: false }
+      ], function (vals, done) {
+        PHG_API.create("drivers", {
+          name: vals.name, licence_class: vals.licence,
+          phone: vals.phone, status: "Active"
+        }).then(function () { done(); toast("Driver added.", "success"); refreshLiveData(); })
+          .catch(function (e) { done("Create failed: " + apiError(e)); });
+      });
+    });
   };
 
   /* ---------- Customers & Leads ---------- */
@@ -775,17 +927,58 @@
       btn.addEventListener("click", function () {
         var id = btn.getAttribute("data-approve-tx");
         confirmModal("Approve transaction", "Approve " + id + "? Approved records lock and enter the audit trail.", function () {
-          var t = D.transactions.filter(function (x) { return x.id === id; })[0];
-          if (!t) return;
-          t.status = "Approved";
-          pushAudit("Approved " + t.type.toLowerCase() + " " + id, id, "Success");
-          toast(id + " approved.", "success");
-          navigate("finance");
+          PHG_API.update("transactions", id, { status: "Approved" }).then(function () {
+            toast(id + " approved.", "success");
+            navigate("finance");
+          }).catch(function (e) {
+            toast("Approve failed: " + apiError(e), "error");
+          });
         });
       });
     });
     var b = el("btnAddTx");
-    if (b) b.addEventListener("click", function () { toast("Demo: transaction form validates amount > 0, category, division and evidence upload."); });
+    if (b) b.addEventListener("click", function () {
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Record Transaction";
+      body.innerHTML = '<form id="addTxForm" style="display:grid;gap:10px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Date</span><input name="txn_date" type="date" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Type</span><select name="kind" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"><option value="Income">Income</option><option value="Expense">Expense</option></select></label>' +
+        '</div>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Category</span><input name="category" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Division</span><input name="division" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Description</span><input name="description" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Amount (ETB)</span><input name="amount" type="number" min="0.01" step="any" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Reference</span><input name="reference" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '</form>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Record Transaction";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = async function () {
+        var fd = new FormData(el("addTxForm"));
+        var payload = {
+          type: fd.get("kind"),
+          category: fd.get("category"),
+          division: fd.get("division"),
+          description: fd.get("description"),
+          amount: parseFloat(fd.get("amount")) || 0,
+          date: fd.get("txn_date") || new Date().toISOString().slice(0, 10),
+          ref: fd.get("reference") || ""
+        };
+        try {
+          await PHG_API.create("transactions", payload);
+          mb.style.display = "none";
+          toast("Transaction recorded (pending approval).", "success");
+          navigate("finance");
+        } catch (e) {
+          toast("Create failed: " + apiError(e), "error");
+        }
+      };
+      mb.style.display = "flex";
+    });
   };
   /* ---------- Invoices ---------- */
   VIEWS.invoices = function () {
@@ -831,14 +1024,17 @@
     content().innerHTML = html;
     content().querySelectorAll("[data-doc]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        pushAudit("Downloaded document " + btn.getAttribute("data-doc"), btn.getAttribute("data-doc"), "Success");
-        toast("Demo: authorized download with audit record. Sensitive files use signed, expiring links.");
+        // §8: the Document API is metadata-only (no file binary backend),
+        // so never claim a download. Mark the limitation honestly.
+        toast("Document metadata only — file download is unavailable until file storage is configured.", "error");
       });
     });
   };
   /* ---------- Meetings ---------- */
   VIEWS.meetings = function () {
-    var html = pageHead("Meetings & Resolutions", "Governance records: notices, attendance, minutes and follow-up actions.");
+    var canManage = session.role === "gm" || session.role === "admin";
+    var html = pageHead("Meetings & Resolutions", "Governance records: notices, attendance, minutes and follow-up actions.",
+      canManage ? '<button class="btn btn-primary" id="btnAddMeeting">+ Record Meeting</button>' : "");
     var rows = "";
     D.meetings.forEach(function (m) {
       rows += "<tr><td><strong>" + m.id + "</strong></td><td>" + m.type + "</td><td>" + m.date + "</td><td>" + m.attendees + "</td>" +
@@ -849,6 +1045,21 @@
       "<th>Meeting</th><th>Type</th><th>Date</th><th>Attendance</th><th>Status</th><th>Summary</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>", "", true);
     content().innerHTML = html;
+    var bm = el("btnAddMeeting");
+    if (bm) bm.addEventListener("click", function () {
+      // §7.2: real POST /meetings/ — no demo fallback.
+      openFormModal("Record Meeting", [
+        { name: "type", label: "Type (e.g. Board)", required: true },
+        { name: "date", label: "Date (YYYY-MM-DD)", required: true },
+        { name: "attendees", label: "Attendees", required: false }
+      ], function (vals, done) {
+        PHG_API.create("meetings", {
+          kind: vals.type, held_on: vals.date,
+          attendees: vals.attendees, status: "Scheduled"
+        }).then(function () { done(); toast("Meeting recorded.", "success"); refreshLiveData(); })
+          .catch(function (e) { done("Create failed: " + apiError(e)); });
+      });
+    });
   };
 
   /* ---------- Reports ---------- */
@@ -901,10 +1112,16 @@
 
     content().innerHTML = html;
     el("btnMarkRead").addEventListener("click", function () {
-      notifications.forEach(function (n) { n.unread = false; });
-      updateBell();
-      toast("All notifications marked as read.", "success");
-      navigate("notifications");
+      var unread = notifications.filter(function (n) { return n.unread; });
+      if (!unread.length) { toast("No unread notifications.", "success"); return; }
+      Promise.all(unread.map(function (n) {
+        return PHG_API.update("notifications", n.id, { is_read: true });
+      })).then(function () {
+        toast("All notifications marked as read.", "success");
+        refreshLiveData();
+      }).catch(function (e) {
+        toast("Mark read failed: " + apiError(e), "error");
+      });
     });
   };
 
@@ -956,9 +1173,25 @@
     html += panel("Role definitions", "Navigation hides unauthorized items; the backend independently enforces every permission.", rc);
 
     content().innerHTML = html;
-    el("btnInvite").addEventListener("click", function () {
-      toast("Demo: invite form sends a time-limited, single-use activation link.");
+    var inviteBtn = el("btnInvite");
+    if (inviteBtn) inviteBtn.addEventListener("click", function () {
+      // §8: real admin-controlled POST /users/ — never self-elevation.
+      // The new account is created Inactive-equivalent ("Invited") so an
+      // admin must activate it; the backend ignores any client role games.
+      openFormModal("Invite User", [
+        { name: "email", label: "Email", required: true },
+        { name: "first_name", label: "First name", required: true },
+        { name: "role", label: "Role (admin/gm/finance/transport/projects/sales/shareholder/auditor)", required: true }
+      ], function (vals, done) {
+        PHG_API.create("users", {
+          email: vals.email, username: vals.email.split("@")[0],
+          first_name: vals.first_name, role: vals.role.toLowerCase(),
+          status: "Invited", password: "Temp" + Math.random().toString(36).slice(2, 10) + "xA1"
+        }).then(function () { done(); toast("User invited (status: Invited).", "success"); refreshLiveData(); })
+          .catch(function (e) { done("Invite failed: " + apiError(e)); });
+      });
     });
+  };
   };
 
   /* ---------- Settings ---------- */

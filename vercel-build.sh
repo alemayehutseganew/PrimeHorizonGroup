@@ -13,5 +13,7 @@ pip install --break-system-packages -r requirements.txt
 # the interpreter that actually runs this script and manage.py.
 python -m pip install --break-system-packages --force-reinstall --no-cache-dir --no-deps psycopg2-binary
 python manage.py migrate --noinput
-python manage.py seed_demo
+# NOTE: seed_demo intentionally removed from production builds.
+# Demo/sample business records must never be auto-seeded in production.
+# The portal loads real data from the Django REST API against PostgreSQL.
 python manage.py collectstatic --noinput

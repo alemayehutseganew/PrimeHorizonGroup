@@ -6,8 +6,13 @@ Business rules enforced here (never trust the client):
     inside a database transaction, with audit entries either way;
   * shareholders/auditors are read-only on business data;
   * approved records cannot be edited or deleted — only reversed with a note.
+  * public record codes (SH-001, VH-01, INV-2041…) are assigned by the
+    server, never chosen by the client.
 """
+import re
+
 from django.db import transaction
+from django.db.models import Q as models_Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action, api_view, permission_classes
@@ -71,10 +76,54 @@ def actor_name(user):
     return user.get_full_name() or user.email
 
 
+# Public record codes per module (§5.1): server-assigned only — the
+# client can never pick a code (serializers expose it read-only as `id`).
+CODE_PREFIXES = {
+    "shareholders": ("SH", 3),
+    "contributions": ("CT", 4),
+    "meetings": ("MTG", 3),
+    "customers": ("CU", 2),
+    "leads": ("LD", 2),
+    "vehicles": ("VH", 2),
+    "drivers": ("DR", 1),
+    "trips": ("TR", 4),
+    "maintenance": ("MT", 3),
+    "projects": ("PR", 3),
+    "tasks": ("TK", 3),
+    "transactions": ("FN", 4),
+    "invoices": ("INV", 4),
+    "payments": ("PY", 4),
+    "documents": ("DOC", 2),
+}
+
+
+def next_code(model, view_name):
+    """Highest existing PREFIX-nnn + 1 (e.g. SH-014 -> SH-015)."""
+    prefix, width = CODE_PREFIXES[view_name]
+    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
+    max_n = 0
+    for code in model.objects.values_list("code", flat=True):
+        m = pattern.match(code or "")
+        if m:
+            n = int(m.group(1))
+            if n > max_n:
+                max_n = n
+    return f"{prefix}-{max_n + 1:0{width}d}"
+
+
 class BaseViewSet(viewsets.ModelViewSet):
     permission_classes = [RolePermission, ReadOnlyRoles]
     view_name = ""
     lookup_field = "code"  # public ids are codes like SH-001, CT-1012
+
+    def perform_create(self, serializer):
+        # §5.1: record codes are server-assigned public ids; serializers
+        # expose `code` read-only (as `id`), so POSTs would otherwise save
+        # code="" and break uniqueness + lookup on the second create.
+        if self.view_name in CODE_PREFIXES:
+            serializer.save(code=next_code(self.queryset.model, self.view_name))
+        else:
+            serializer.save()
 
 
 class ShareholderViewSet(BaseViewSet):
@@ -97,7 +146,8 @@ class ContributionViewSet(BaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(recorded_by=self.request.user,
-                        status=ContributionStatus.PENDING)
+                        status=ContributionStatus.PENDING,
+                        code=next_code(Contribution, self.view_name))
         audit(actor_name(self.request.user),
               f"Recorded contribution {serializer.instance.code}",
               serializer.instance.code)
@@ -160,7 +210,8 @@ class TransactionViewSet(BaseViewSet):
     ordering_fields = ["txn_date", "amount"]
 
     def perform_create(self, serializer):
-        serializer.save(recorded_by=self.request.user, status="Pending")
+        serializer.save(recorded_by=self.request.user, status="Pending",
+                        code=next_code(Transaction, self.view_name))
         audit(actor_name(self.request.user),
               f"Recorded {serializer.instance.kind.lower()} "
               f"{serializer.instance.code}", serializer.instance.code)
@@ -307,10 +358,34 @@ class NotificationViewSet(viewsets.ModelViewSet):
     """Users see and manage their own notifications."""
     serializer_class = NotificationSerializer
     view_name = "notifications"
+    http_method_names = ["get", "patch", "post", "head", "options"]
 
     def get_queryset(self):
+        # FIX §8: scope strictly to the logged-in user (+ global broadcasts).
+        # The old `recipient__in=[None, user]` queryset combined with the
+        # default ModelViewSet allowed a user to PATCH/DELETE another user's
+        # row by id. Writes are now blocked at object level below.
+        user = self.request.user
+        if getattr(user, "role", None) in ("admin", "gm"):
+            return Notification.objects.all().order_by("-created_at")
         return Notification.objects.filter(
-            recipient__in=[None, self.request.user]).order_by("-created_at")
+            models_Q(recipient__isnull=True) | models_Q(recipient=user)
+        ).order_by("-created_at")
+
+    def get_object(self):
+        note = super().get_object()
+        user = self.request.user
+        # Non-admins may only touch their own or broadcast rows.
+        if getattr(user, "role", None) not in ("admin", "gm"):
+            if note.recipient_id not in (None, user.id):
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied("Not your notification.")
+        return note
+
+    def perform_update(self, serializer):
+        # Only is_read may change via the API (idempotent mark-read).
+        serializer.save(is_read=serializer.validated_data.get(
+            "is_read", serializer.instance.is_read))
 
     @action(detail=True, methods=["post"])
     def mark_read(self, request, pk=None):
@@ -342,6 +417,40 @@ class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [RolePermission]
     filterset_fields = ["role", "status"]
     search_fields = ["email", "first_name", "last_name"]
+
+    def _guard_role_change(self, target, data):
+        # §9: only admins may grant the admin role; nobody may change
+        # their own role or deactivate themselves.
+        # target=None means "creating a new user" — the self-change rule
+        # does not apply (previously this compared the requester to
+        # themselves and blocked every legitimate invite).
+        from rest_framework.exceptions import PermissionDenied
+        me = self.request.user
+        if target is not None and target.id == me.id and (
+                "role" in data or data.get("status") in ("Inactive", "Suspended")):
+            raise PermissionDenied("You cannot change your own role or deactivate yourself.")
+        if data.get("role") == Role.ADMIN and me.role != Role.ADMIN:
+            raise PermissionDenied("Only an admin can grant the admin role.")
+
+    def perform_create(self, serializer):
+        self._guard_role_change(None, self.request.data)
+        serializer.save()
+        audit(actor_name(self.request.user),
+              f"Invited user {serializer.instance.email}",
+              serializer.instance.email)
+
+    def perform_update(self, serializer):
+        self._guard_role_change(serializer.instance, self.request.data)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        # §5.1/§9: users are deactivated, never hard-deleted.
+        from rest_framework.exceptions import PermissionDenied
+        if instance.id == self.request.user.id:
+            raise PermissionDenied("You cannot delete your own account.")
+        instance.status = "Inactive"
+        instance.is_active = False
+        instance.save(update_fields=["status", "is_active"])
 
 
 class InquiryViewSet(viewsets.ModelViewSet):

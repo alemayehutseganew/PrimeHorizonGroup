@@ -29,7 +29,8 @@ _PHG_PATH = re.compile(r"(?:^|&)__phg_path=([^&]*)")
 
 
 def application(environ, start_response):
-    match = _PHG_PATH.search(environ.get("QUERY_STRING", ""))
+    qs = environ.get("QUERY_STRING", "")
+    match = _PHG_PATH.search(qs)
     if match:
         restored = unquote(match.group(1))
         if restored and restored != "/":
@@ -39,6 +40,11 @@ def application(environ, start_response):
             environ["PATH_INFO"] = restored
         elif restored == "/":
             environ["PATH_INFO"] = "/"
+        # FIX: strip __phg_path from QUERY_STRING so Django filters/
+        # pagination see only real params (page, search, etc.).
+        # Preserve any additional query params (e.g. &page=2).
+        remaining = [p for p in qs.split("&") if not p.startswith("__phg_path=")]
+        environ["QUERY_STRING"] = "&".join(remaining)
     return _django_app(environ, start_response)
 
 
