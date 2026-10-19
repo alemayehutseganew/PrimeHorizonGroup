@@ -16,7 +16,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-local-dev-only-change-me")
 if os.environ.get("VERCEL") and SECRET_KEY.startswith("django-insecure-"):
     raise RuntimeError("SECRET_KEY must be set to a long random value in Vercel env.")
-DEBUG = os.environ.get("DEBUG", "True").lower() in ("1", "true", "yes")
+# Local dev defaults to True; Vercel defaults to False (production-safe).
+DEBUG = os.environ.get(
+    "DEBUG", "False" if os.environ.get("VERCEL") else "True",
+).lower() in ("1", "true", "yes")
 if os.environ.get("VERCEL") and DEBUG:
     raise RuntimeError("DEBUG must be False on Vercel production.")
 
@@ -92,30 +95,41 @@ TEMPLATES = [
 
 
 # Database -------------------------------------------------------------------
-_db_url = os.environ.get("DATABASE_URL", "").strip()
+# Vercel-Neon integration injects POSTGRES_URL_NON_POOLING / POSTGRES_URL
+# automatically when connected; an explicit DATABASE_URL still wins.
+_db_url = (
+    os.environ.get("DATABASE_URL", "").strip()
+    or os.environ.get("POSTGRES_URL_NON_POOLING", "").strip()
+    or os.environ.get("POSTGRES_URL", "").strip()
+)
 if _db_url:
     # Serverless (Vercel): never reuse connections across invocations —
     # a pooled connection held warm between requests goes stale and the
     # next write fails with a 500 while reads still succeed.
     # conn_max_age=0 closes each connection after its request.
-    # Pair with Neon's UNPOOLED connection string for full Django compat.
-    DATABASES = {
-        "default": dj_database_url.parse(
-            _db_url,
-            conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "0")),
-            conn_health_checks=True,
-            ssl_require=True,
-        )
-    }
+    # Prefer the UNPOOLED (direct) Neon host for full Django/psycopg2
+    # compat — the pooler URL is only a last-resort fallback here.
+    _db_cfg = dj_database_url.parse(
+        _db_url,
+        conn_max_age=int(os.environ.get("DB_CONN_MAX_AGE", "0")),
+        conn_health_checks=True,
+        ssl_require=True,
+    )
+    # libpq's `channel_binding` keyword (present in Neon dashboard URLs)
+    # is not understood by every psycopg2/libpq build and breaks connects
+    # through pgbouncer. Plain SCRAM-over-TLS still applies without it.
+    _db_cfg.get("OPTIONS", {}).pop("channel_binding", None)
+    DATABASES = {"default": _db_cfg}
 else:
     if os.environ.get("VERCEL"):
         # Loud, early failure instead of a silent read-only SQLite: on Vercel
         # the bundled sqlite lives in the immutable /var/task bundle — reads
         # work but every write fails with "attempt to write a readonly database".
         raise RuntimeError(
-            "DATABASE_URL is not set. Production on Vercel requires a Postgres "
-            "(Neon) connection string — set DATABASE_URL in Project Settings -> "
-            "Environment Variables (value must start with postgresql://), then redeploy."
+            "No Postgres connection string found. Set DATABASE_URL "
+            "(or connect the Neon integration so POSTGRES_URL_NON_POOLING "
+            "is injected) in Vercel Project Settings -> Environment "
+            "Variables (value must start with postgresql://), then redeploy."
         )
     DATABASES = {
         "default": {
