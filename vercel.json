@@ -22,20 +22,20 @@
   ],
   "rewrites": [
     {
-      "source": "/api/index",
-      "destination": "/api/index.py"
-    },
-    {
       "source": "/api/:path*",
-      "destination": "/api/index.py?__phg_path=/:path*"
+      "destination": "/api/index?__phg_path=/:path*"
     },
     {
       "source": "/admin/:path*",
-      "destination": "/api/index.py?__phg_path=/admin/:path*"
+      "destination": "/api/index?__phg_path=/admin/:path*"
+    },
+    {
+      "source": "/admin",
+      "destination": "/api/index?__phg_path=/admin/"
     },
     {
       "source": "/static/admin/:path*",
-      "destination": "/api/index.py?__phg_path=/static/admin/:path*"
+      "destination": "/api/index?__phg_path=/static/admin/:path*"
     },
     {
       "source": "/static/css/:path*",

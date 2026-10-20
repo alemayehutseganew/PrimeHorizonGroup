@@ -10,11 +10,10 @@ from .models import Role
 
 # Frontend view name -> roles allowed to access the underlying endpoints.
 VIEW_ROLES = {
-    "shareholders": {Role.ADMIN, Role.GM, Role.FINANCE, Role.SHAREHOLDER, Role.AUDITOR},
-    "contributions": {Role.ADMIN, Role.GM, Role.FINANCE, Role.SHAREHOLDER, Role.AUDITOR},
-    "meetings": {Role.ADMIN, Role.GM, Role.FINANCE, Role.SHAREHOLDER, Role.AUDITOR},
-    "leads": {Role.ADMIN, Role.GM, Role.FINANCE, Role.TRANSPORT, Role.PROJECTS,
-              Role.SALES},
+    "shareholders": {Role.ADMIN, Role.GM, Role.FINANCE, Role.SHAREHOLDER},
+    "contributions": {Role.ADMIN, Role.GM, Role.FINANCE, Role.SHAREHOLDER},
+    "meetings": {Role.ADMIN, Role.GM, Role.FINANCE, Role.SHAREHOLDER},
+    "leads": {Role.ADMIN, Role.GM, Role.FINANCE, Role.TRANSPORT, Role.PROJECTS},
     "vehicles": {Role.ADMIN, Role.GM, Role.TRANSPORT},
     "drivers": {Role.ADMIN, Role.GM, Role.TRANSPORT},
     "trips": {Role.ADMIN, Role.GM, Role.TRANSPORT},
@@ -26,9 +25,9 @@ VIEW_ROLES = {
     "documents": {Role.ADMIN, Role.GM, Role.FINANCE, Role.TRANSPORT,
                   Role.PROJECTS, Role.SHAREHOLDER},
     "reports": {Role.ADMIN, Role.GM, Role.FINANCE, Role.TRANSPORT,
-                Role.PROJECTS, Role.SHAREHOLDER, Role.AUDITOR},
+                Role.PROJECTS, Role.SHAREHOLDER},
     "notifications": None,  # every authenticated user sees their own
-    "audit": {Role.ADMIN, Role.GM, Role.FINANCE, Role.AUDITOR},
+    "audit": {Role.ADMIN, Role.GM, Role.FINANCE},
     "users": {Role.ADMIN, Role.GM},
     "settings": None,  # every authenticated user
 }

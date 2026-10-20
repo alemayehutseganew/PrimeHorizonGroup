@@ -100,6 +100,36 @@ class ContributionCRUDTests(CRUDTestBase):
         self.assertEqual(c.status, ContributionStatus.PENDING)
         self.assertEqual(c.recorded_by, self.gm)
 
+    def test_contribution_code_generation(self):
+        """§5.1: contribution codes are server-assigned, unique, CT-#### format."""
+        sh = Shareholder.objects.create(code="SH-001", legal_name="Test", shares=1, paid=Decimal("0"))
+        r1 = self.client.post("/api/contributions/", {
+            "shareholder_code": "SH-001",
+            "amount": "250000.00",
+            "currency": "ETB",
+            "kind": "Share capital",
+            "date": "2026-03-01",
+            "method": "Bank transfer",
+            "reference": "REF-001",
+        })
+        self.assertEqual(r1.status_code, 201, r1.content)
+        code1 = r1.json()["id"]
+        self.assertTrue(code1.startswith("CT-"), code1)
+
+        r2 = self.client.post("/api/contributions/", {
+            "shareholder_code": "SH-001",
+            "amount": "100000.00",
+            "currency": "ETB",
+            "kind": "Share capital",
+            "date": "2026-03-02",
+            "method": "Bank transfer",
+            "reference": "REF-002",
+        })
+        self.assertEqual(r2.status_code, 201, r2.content)
+        code2 = r2.json()["id"]
+        self.assertTrue(code2.startswith("CT-"), code2)
+        self.assertNotEqual(code1, code2)
+
     def test_approve_updates_paid_capital(self):
         sh = Shareholder.objects.create(code="SH-001", legal_name="Test", shares=1, paid=Decimal("0"))
         c = Contribution.objects.create(
@@ -291,10 +321,18 @@ class PermissionTests(CRUDTestBase):
         self.assertEqual(r.status_code, 403)
 
     def test_auditor_read_only(self):
+        """Auditor is not in frontend ROLE_VIEWS → denied access to all endpoints."""
         client = auth_client_for(self.auditor)
         r = client.get("/api/shareholders/")
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 403)
         r = client.post("/api/shareholders/", {"name": "X", "shares": 1})
+        self.assertEqual(r.status_code, 403)
+
+    def test_sales_cannot_access_leads(self):
+        """Sales role is not in frontend ROLE_VIEWS → denied."""
+        sales = make_user("sales@test.et", Role.SALES, username="sales")
+        client = auth_client_for(sales)
+        r = client.get("/api/leads/")
         self.assertEqual(r.status_code, 403)
 
     def test_approver_only_approve_contribution(self):

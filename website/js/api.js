@@ -129,13 +129,58 @@
     return access;
   }
 
-  function logout() {
-    clearToken();
-    apiMode = "offline";
+  async function logout() {
+    var refresh = REFRESH_TOKEN || getStored(REFRESH_KEY);
+
+    try {
+      if (refresh) {
+        await apiRequest("/auth/logout/", {
+          method: "POST",
+          body: { refresh: refresh },
+          _retried: true
+        });
+      }
+    } finally {
+      clearToken();
+      apiMode = "offline";
+    }
   }
 
   async function me() {
     return apiRequest("/auth/me/", { method: "GET" });
+  }
+
+  /* ---------- Account lifecycle (signup / verify / reset) ---------- */
+  async function signup(email, username, password) {
+    return apiRequest("/auth/signup/", {
+      method: "POST",
+      body: { email: email.toLowerCase(), username: username, password: password }
+    });
+  }
+
+  async function verifyEmail(token) {
+    return apiRequest("/auth/email-verification/", {
+      method: "POST", body: { token: token }
+    });
+  }
+
+  async function requestPasswordReset(email) {
+    // Backend always returns the same generic response whether or not the
+    // account exists — never surface account state to the caller.
+    return apiRequest("/auth/password-reset/", {
+      method: "POST", body: { email: email.toLowerCase() }
+    });
+  }
+
+  async function confirmPasswordReset(token, newPassword, confirmation) {
+    return apiRequest("/auth/password-reset/confirm/", {
+      method: "POST",
+      body: {
+        token: token,
+        new_password: newPassword,
+        password_confirmation: confirmation || newPassword
+      }
+    });
   }
   /* ---------- Data endpoints ---------- */
   var ENDPOINTS = {
@@ -383,6 +428,9 @@
 
   window.PHG_API = {
     login: login, logout: logout, me: me, list: list, summary: summary,
+    signup: signup, verifyEmail: verifyEmail,
+    requestPasswordReset: requestPasswordReset,
+    confirmPasswordReset: confirmPasswordReset,
     approveContribution: approveContribution, rejectContribution: rejectContribution,
     postInquiry: postInquiry, postVehicle: postVehicle,
     create: create, update: update, del: del,

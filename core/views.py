@@ -120,31 +120,45 @@ CODE_PREFIXES = {
 }
 
 
-def next_code(model, view_name):
-    """Highest existing PREFIX-nnn + 1 (e.g. SH-014 -> SH-015)."""
-    prefix, width = CODE_PREFIXES[view_name]
-    pattern = re.compile(rf"^{re.escape(prefix)}-(\d+)$")
-    max_n = 0
-    for code in model.objects.values_list("code", flat=True):
-        m = pattern.match(code or "")
-        if m:
-            n = int(m.group(1))
-            if n > max_n:
-                max_n = n
-    return f"{prefix}-{max_n + 1:0{width}d}"
+def next_code(model, prefix, width):
+    """Concurrency-safe code allocation using a database-backed sequence.
+
+    A dedicated CodeSequence model (table) holds the per-prefix counter.
+    Two simultaneous requests each acquire a SELECT ... FOR UPDATE lock on
+    their own counter row, increment it atomically, and read back the new
+    value — guaranteeing unique codes without application-level retry loops.
+    The model's code field retains a uniqueness constraint as a final safeguard.
+    """
+    from django.db import models as _models
+    from django.db import transaction
+
+    # Import the sequence table here to avoid a circular import at module level.
+    from .models import CodeSequence
+
+    # ensure_sequence ensures a counter row exists for (prefix, width).
+    # It uses INSERT ... ON CONFLICT DO UPDATE to be idempotent under concurrency.
+    CodeSequence.ensure_sequence(prefix, width)
+
+    with transaction.atomic():
+        seq = CodeSequence.objects.select_for_update().get(prefix=prefix, width=width)
+        seq.value += 1
+        seq.save(update_fields=["value"])
+        return f"{prefix}-{seq.value:0{width}d}"
 
 
 class BaseViewSet(viewsets.ModelViewSet):
     permission_classes = [RolePermission, ReadOnlyRoles]
     view_name = ""
+    code_prefix = None  # e.g. ("FN", 4) for transactions; None disables coding
     lookup_field = "code"  # public ids are codes like SH-001, CT-1012
 
     def perform_create(self, serializer):
         # §5.1: record codes are server-assigned public ids; serializers
         # expose `code` read-only (as `id`), so POSTs would otherwise save
         # code="" and break uniqueness + lookup on the second create.
-        if self.view_name in CODE_PREFIXES:
-            serializer.save(code=next_code(self.queryset.model, self.view_name))
+        if self.code_prefix is not None:
+            code = next_code(self.queryset.model, *self.code_prefix)
+            serializer.save(code=code)
         else:
             serializer.save()
 
@@ -163,6 +177,7 @@ class ContributionViewSet(BaseViewSet):
         "shareholder", "recorded_by", "decided_by").all()
     serializer_class = ContributionSerializer
     view_name = "contributions"
+    code_prefix = ("CT", 4)
     filterset_fields = ["status", "shareholder"]
     search_fields = ["code", "reference"]
     ordering_fields = ["paid_on", "amount"]
@@ -170,7 +185,7 @@ class ContributionViewSet(BaseViewSet):
     def perform_create(self, serializer):
         serializer.save(recorded_by=self.request.user,
                         status=ContributionStatus.PENDING,
-                        code=next_code(Contribution, self.view_name))
+                        code=next_code(Contribution, *self.code_prefix))
         audit(actor_name(self.request.user),
               f"Recorded contribution {serializer.instance.code}",
               serializer.instance.code)
@@ -227,14 +242,15 @@ class ContributionViewSet(BaseViewSet):
 class TransactionViewSet(BaseViewSet):
     queryset = Transaction.objects.all()
     serializer_class = TransactionSerializer
-    view_name = "finance"
+    view_name = "transactions"
+    code_prefix = ("FN", 4)
     filterset_fields = ["kind", "status", "division"]
     search_fields = ["code", "reference", "category"]
     ordering_fields = ["txn_date", "amount"]
 
     def perform_create(self, serializer):
         serializer.save(recorded_by=self.request.user, status="Pending",
-                        code=next_code(Transaction, self.view_name))
+                        code=next_code(Transaction, *self.code_prefix))
         audit(actor_name(self.request.user),
               f"Recorded {serializer.instance.kind.lower()} "
               f"{serializer.instance.code}", serializer.instance.code)
@@ -294,7 +310,8 @@ class InvoiceViewSet(BaseViewSet):
 class PaymentViewSet(BaseViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
-    view_name = "invoices"
+    view_name = "payments"
+    code_prefix = ("PY", 4)
     filterset_fields = ["invoice_code"]
     search_fields = ["code", "reference"]
 
@@ -302,7 +319,8 @@ class PaymentViewSet(BaseViewSet):
 class CustomerViewSet(BaseViewSet):
     queryset = Customer.objects.all()
     serializer_class = CustomerSerializer
-    view_name = "leads"
+    view_name = "customers"
+    code_prefix = ("CU", 2)
     filterset_fields = ["status"]
     search_fields = ["code", "name", "contact_person"]
 
@@ -508,8 +526,10 @@ class ResetConfirmThrottle(AnonRateThrottle):
     rate = "5/minute"
 
 
-class LoginThrottle(UserRateThrottle):
-    """Rate limit login attempts per user."""
+class LoginThrottle(AnonRateThrottle):
+    """Rate limit login attempts per IP. No authenticated user is present,
+    so UserRateThrottle cannot identify a user to key on; the anonymous-IP
+    throttle is the correct throttle for login."""
     rate = "10/minute"
 
 
@@ -602,16 +622,13 @@ def password_reset_request(request):
             "Use it at the reset page. This token is single-use and expires in 1 hour.\n"
             "If you did not request a reset, please ignore this email."
         )
-        try:
-            send_mail(
-                subject,
-                message,
-                settings.DEFAULT_FROM_EMAIL,
-                [user.email],
-                fail_silently=True,
-            )
-        except Exception:
-            pass
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=False,
+        )
 
     return Response(
         {"detail": "If an account matches that email address, instructions will be sent shortly."},
@@ -643,16 +660,13 @@ def signup(request):
         "Use it at the email-verification endpoint to activate your account.\n"
         "This token expires in 24 hours."
     )
-    try:
-        send_mail(
-            subject,
-            message,
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=True,
-        )
-    except Exception:
-        pass
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+    )
 
     # Return a generic success message; do not disclose account state.
     return Response(

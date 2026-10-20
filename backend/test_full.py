@@ -1,9 +1,21 @@
-import requests, json
+import os
+import sys
 
-BASE = "http://127.0.0.1:8001/api"
+import requests
+
+# Credentials come from the environment — never hardcode them here.
+# PowerShell:
+#   $env:PHG_EMAIL = "you@example.com"
+#   $env:PHG_PASSWORD = Read-Host "Password" -AsSecureString | ForEach-Object {
+#       [System.Net.NetworkCredential]::new("", $_).Password }
+BASE = os.environ.get("PHG_BASE", "http://127.0.0.1:8001/api")
+email = os.environ.get("PHG_EMAIL")
+password = os.environ.get("PHG_PASSWORD")
+if not email or not password:
+    sys.exit("Set PHG_EMAIL and PHG_PASSWORD in the environment before running.")
 
 # Login
-r = requests.post(f"{BASE}/auth/token/", json={"email": "gm@primehorizon.et", "password": "demo1234"})
+r = requests.post(f"{BASE}/auth/token/", json={"email": email, "password": password})
 print(f"LOGIN: {r.status_code}")
 token = r.json()["access"]
 h = {"Authorization": f"Bearer {token}"}

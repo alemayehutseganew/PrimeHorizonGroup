@@ -1,8 +1,13 @@
 """Seed the database with the portal demo dataset.
 
 Mirrors website/js/data.js exactly. Idempotent — safe to re-run.
-Demo login password for every seeded user: demo1234.
+The password applied to every seeded user is taken from the PHG_SEED_PASSWORD
+environment variable; if it is not set, a strong random password is generated
+and printed once at the end of the run. Never seed demo users in production.
 """
+import os
+import secrets
+import string
 from datetime import date, datetime, time
 from decimal import Decimal
 
@@ -12,7 +17,14 @@ from django.utils import timezone
 
 from core.models import Contribution, Shareholder, User
 
-PASSWORD = "demo1234"
+
+def resolve_seed_password():
+    """Password for seeded accounts: env override, else a generated one."""
+    supplied = os.environ.get("PHG_SEED_PASSWORD", "").strip()
+    if supplied:
+        return supplied, False
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(16)), True
 
 USERS = [
     ("gm@primehorizon.et", "gm", "Ato Samuel Girma", "gm", "Active", True, False),
@@ -34,8 +46,9 @@ class Command(BaseCommand):
     help = "Seed the demo dataset (mirrors website/js/data.js)."
 
     def handle(self, *args, **options):
+        password, generated = resolve_seed_password()
         with transaction.atomic():
-            users = self.seed_users()
+            users = self.seed_users(password)
             sh_map = self.seed_shareholders()
             self.seed_contributions(sh_map, users)
             self.seed_fleet()
@@ -43,8 +56,12 @@ class Command(BaseCommand):
             self.seed_finance(users)
             self.seed_governance(users)
         self.stdout.write(self.style.SUCCESS("Demo data seeded."))
+        if generated:
+            self.stdout.write(self.style.WARNING(
+                "Seeded users were given this generated password (shown once, "
+                "not stored anywhere else): " + password))
 
-    def seed_users(self):
+    def seed_users(self, password):
         users = {}
         for email, username, name, role, st, is_staff, is_super in USERS:
             u, _ = User.objects.update_or_create(
@@ -54,7 +71,7 @@ class Command(BaseCommand):
                           "is_staff": is_staff, "is_superuser": is_super,
                           "is_active": st == "Active"},
             )
-            u.set_password(PASSWORD)
+            u.set_password(password)
             u.save()
             users[email] = u
         return users

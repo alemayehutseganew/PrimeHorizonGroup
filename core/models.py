@@ -636,3 +636,30 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.actor} — {self.action}"
+
+
+class CodeSequence(models.Model):
+    """Database-backed sequence for public record codes.
+
+    Each prefix/width pair gets a single counter row. ``get_or_create`` +
+    ``select_for_update`` guarantees that two concurrent requests never
+    get the same sequence value. ``ensure_sequence`` is idempotent (upsert).
+    """
+    prefix = models.CharField(max_length=8, db_index=True)   # e.g. "FN"
+    width = models.PositiveIntegerField()                     # e.g. 4
+    value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        unique_together = [["prefix", "width"]]
+        ordering = ["prefix", "width"]
+
+    @classmethod
+    def ensure_sequence(cls, prefix, width):
+        """Insert a counter row if missing; idempotent under concurrency."""
+        obj, created = cls.objects.get_or_create(
+            prefix=prefix, width=width, defaults={"value": 0},
+        )
+        return obj
+
+    def __str__(self):
+        return f"{self.prefix}-{self.value} (w={self.width})"

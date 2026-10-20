@@ -212,3 +212,24 @@ SIMPLE_JWT = {
 
 # Business constants (SRS planning scenario) ----------------------------------
 SHARE_PRICE_ETB = int(os.environ.get("SHARE_PRICE_ETB", "250000"))
+
+
+# Email -----------------------------------------------------------------------
+# SMTP is configured from the environment. Without EMAIL_HOST the console
+# backend is used and verification/reset emails are printed to the runtime
+# log instead of being delivered — set EMAIL_HOST(+USER/PASSWORD) in Vercel
+# to send real mail. DEFAULT_FROM_EMAIL must be an address the SMTP server
+# is allowed to send from.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "").strip()
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in ("1", "true", "yes")
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "False").lower() in ("1", "true", "yes")
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "").strip() or (
+    "django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST
+    else "django.core.mail.backends.console.EmailBackend"
+)
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "noreply@primehorizon.et")
+SERVER_EMAIL = os.environ.get("SERVER_EMAIL", DEFAULT_FROM_EMAIL)

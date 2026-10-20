@@ -184,6 +184,7 @@
       var pass = el("loginPass").value;
       var err = el("loginError");
       err.classList.remove("show");
+      err.className = "alert error";
       var token = null;
       try {
         token = await PHG_API.login(email, pass);
@@ -219,6 +220,125 @@
         el("loginError").classList.remove("show");
       });
     });
+
+    /* ---------- Panel switching: login <-> reset <-> signup ---------- */
+    function showPanel(which) {
+      el("loginForm").hidden = which !== "login";
+      el("resetForm").hidden = which !== "reset";
+      el("signupForm").hidden = which !== "signup";
+      ["loginError", "resetError", "resetDone", "signupError", "signupDone"]
+        .forEach(function (id) { el(id).classList.remove("show"); });
+      // Reset the multi-step forms when leaving them.
+      if (which !== "reset") {
+        el("resetStep1").hidden = false;
+        el("resetStep2").hidden = true;
+        el("resetForm").reset();
+      }
+      if (which !== "signup") {
+        el("signupStep1").hidden = false;
+        el("signupStep2").hidden = true;
+        el("signupForm").reset();
+      }
+    }
+    el("linkForgot").addEventListener("click", function (e) {
+      e.preventDefault(); showPanel("reset");
+    });
+    el("linkSignup").addEventListener("click", function (e) {
+      e.preventDefault(); showPanel("signup");
+    });
+    document.querySelectorAll(".backToLogin").forEach(function (a) {
+      a.addEventListener("click", function (e) { e.preventDefault(); showPanel("login"); });
+    });
+
+    function apiErrText(e, fallback) {
+      var b = e && e.body;
+      if (!b) return fallback;
+      if (typeof b === "string") return fallback + ": " + b;
+      var d = b.detail || b.email || b.username || b.token ||
+        b.new_password || b.password || b.password_confirmation;
+      if (Array.isArray(d)) d = d.join(" ");
+      return d ? (fallback + ": " + d) : fallback;
+    }
+
+    /* ---------- Password reset ---------- */
+    el("resetSend").addEventListener("click", async function () {
+      var email = el("resetEmail").value.trim().toLowerCase();
+      if (!email) return;
+      var errBox = el("resetError"), doneBox = el("resetDone");
+      errBox.classList.remove("show"); doneBox.classList.remove("show");
+      try {
+        await PHG_API.requestPasswordReset(email);
+        el("resetStep1").hidden = true;
+        el("resetStep2").hidden = false;
+        doneBox.textContent = "If an account matches that email, a reset token " +
+          "has been sent. Enter it below with your new password.";
+        doneBox.classList.add("show");
+      } catch (e2) {
+        errBox.textContent = apiErrText(e2, "Could not request a reset.");
+        errBox.classList.add("show");
+      }
+    });
+    el("resetForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var token = el("resetToken").value.trim();
+      var p1 = el("resetPass").value, p2 = el("resetPass2").value;
+      var errBox = el("resetError"), doneBox = el("resetDone");
+      errBox.classList.remove("show"); doneBox.classList.remove("show");
+      if (p1 !== p2) {
+        errBox.textContent = "Passwords do not match.";
+        errBox.classList.add("show");
+        return;
+      }
+      try {
+        await PHG_API.confirmPasswordReset(token, p1, p2);
+        showPanel("login");
+        el("loginError").textContent =
+          "Password reset successful — sign in with your new password.";
+        el("loginError").className = "alert success show";
+      } catch (e2) {
+        el("loginError").className = "alert error";
+        errBox.textContent = apiErrText(e2, "Password reset failed.");
+        errBox.classList.add("show");
+      }
+    });
+
+    /* ---------- Signup + email verification ---------- */
+    el("signupSend").addEventListener("click", async function () {
+      var email = el("signupEmail").value.trim().toLowerCase();
+      var username = el("signupUsername").value.trim();
+      var pass = el("signupPass").value;
+      var errBox = el("signupError"), doneBox = el("signupDone");
+      errBox.classList.remove("show"); doneBox.classList.remove("show");
+      if (!email || !username || !pass) return;
+      try {
+        await PHG_API.signup(email, username, pass);
+        el("signupStep1").hidden = true;
+        el("signupStep2").hidden = false;
+        doneBox.textContent = "Account created. Check your email for the " +
+          "verification token, then enter it below to activate.";
+        doneBox.classList.add("show");
+      } catch (e2) {
+        errBox.textContent = apiErrText(e2, "Sign-up failed.");
+        errBox.classList.add("show");
+      }
+    });
+    el("signupForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var token = el("signupToken").value.trim();
+      var errBox = el("signupError"), doneBox = el("signupDone");
+      errBox.classList.remove("show"); doneBox.classList.remove("show");
+      try {
+        await PHG_API.verifyEmail(token);
+        showPanel("login");
+        el("loginError").textContent =
+          "Account verified — you can sign in now.";
+        el("loginError").className = "alert success show";
+      } catch (e2) {
+        el("loginError").className = "alert error";
+        errBox.textContent = apiErrText(e2, "Verification failed.");
+        errBox.classList.add("show");
+      }
+    });
   }
 
   function startApp() {
@@ -234,8 +354,8 @@
     navigate("dashboard");
   }
 
-  function logout() {
-    try { PHG_API.logout(); } catch (e) {}
+  async function logout() {
+    try { await PHG_API.logout(); } catch (e) {}
     if (pollTimer) clearInterval(pollTimer);
     session = null;
     el("portalShell").classList.remove("active");
@@ -1191,7 +1311,6 @@
           .catch(function (e) { done("Invite failed: " + apiError(e)); });
       });
     });
-  };
   };
 
   /* ---------- Settings ---------- */
