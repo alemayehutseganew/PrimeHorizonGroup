@@ -183,6 +183,101 @@ class AuthTests(CRUDTestBase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.json()["user"]["email"], "gm@test.et")
 
+    def test_login_wrong_password_rejected(self):
+        r = self.client.post("/api/auth/token/", {
+            "email": "gm@test.et",
+            "password": "wrong-password",
+        })
+        self.assertEqual(r.status_code, 401)
+
+    def test_login_by_username(self):
+        r = self.client.post("/api/auth/token/", {
+            "username": "gm",
+            "password": "testpass123",
+        })
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIn("access", r.json())
+        self.assertIn("refresh", r.json())
+
+    def test_refresh_rotation(self):
+        r = self.client.post("/api/auth/token/", {
+            "email": "gm@test.et",
+            "password": "testpass123",
+        })
+        refresh = r.json()["refresh"]
+        r2 = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
+        self.assertEqual(r2.status_code, 200, r2.content)
+        self.assertIn("access", r2.json())
+
+    def test_logout_revokes_refresh(self):
+        r = self.client.post("/api/auth/token/", {
+            "email": "gm@test.et",
+            "password": "testpass123",
+        })
+        refresh = r.json()["refresh"]
+        authed = APIClient()
+        authed.credentials(HTTP_AUTHORIZATION="Bearer " + r.json()["access"])
+        r2 = authed.post("/api/auth/logout/", {"refresh": refresh})
+        self.assertEqual(r2.status_code, 200, r2.content)
+        r3 = self.client.post("/api/auth/token/refresh/", {"refresh": refresh})
+        self.assertEqual(r3.status_code, 401)
+
+    def test_password_change_revokes_old_tokens(self):
+        r = self.client.post("/api/auth/token/", {
+            "email": "gm@test.et",
+            "password": "testpass123",
+        })
+        old_access = r.json()["access"]
+        authed = APIClient()
+        authed.credentials(HTTP_AUTHORIZATION="Bearer " + old_access)
+        r2 = authed.post("/api/auth/password-change/", {
+            "current_password": "testpass123",
+            "new_password": "newpass1234",
+            "password_confirmation": "newpass1234",
+        })
+        self.assertEqual(r2.status_code, 200, r2.content)
+        r3 = authed.get("/api/auth/me/")
+        self.assertEqual(r3.status_code, 401)
+
+    def test_password_reset_flow(self):
+        r = self.client.post("/api/auth/password-reset/", {"email": "gm@test.et"})
+        self.assertEqual(r.status_code, 200)
+        from .models import PasswordResetToken
+        row = PasswordResetToken.objects.filter(user=self.gm, used=False).first()
+        self.assertIsNotNone(row)
+        from .tokens import PasswordResetTokenGenerator
+        gen = PasswordResetTokenGenerator()
+        raw = gen.make_token(self.gm)
+        r2 = self.client.post("/api/auth/password-reset/confirm/", {
+            "token": raw,
+            "new_password": "resetpass1",
+            "password_confirmation": "resetpass1",
+        })
+        self.assertEqual(r2.status_code, 200, r2.content)
+        r3 = self.client.post("/api/auth/token/", {
+            "email": "gm@test.et",
+            "password": "resetpass1",
+        })
+        self.assertEqual(r3.status_code, 200, r3.content)
+
+    def test_signup_and_verify(self):
+        r = self.client.post("/api/auth/signup/", {
+            "email": "newbie@test.et",
+            "username": "newbie",
+            "password": "signup1234",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+        from .models import EmailVerification
+        row = EmailVerification.objects.filter(user__email="newbie@test.et", used=False).first()
+        self.assertIsNotNone(row)
+        r2 = self.client.post("/api/auth/email-verification/", {"token": row.token})
+        self.assertEqual(r2.status_code, 200, r2.content)
+        r3 = self.client.post("/api/auth/token/", {
+            "email": "newbie@test.et",
+            "password": "signup1234",
+        })
+        self.assertEqual(r3.status_code, 200, r3.content)
+
     def test_unauthenticated_rejected(self):
         self.client.credentials()
         r = self.client.get("/api/shareholders/")

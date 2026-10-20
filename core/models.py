@@ -1,4 +1,6 @@
 """Prime Horizon Group Plc — data model (SRS §7)."""
+import hashlib
+import secrets
 from decimal import Decimal
 
 from django.conf import settings
@@ -37,6 +39,8 @@ class User(AbstractUser):
         default="Active",
     )
 
+    session_version = models.PositiveIntegerField(default=0)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
 
@@ -63,6 +67,90 @@ class ShareholderStatus(models.TextChoices):
     SUSPENDED = "Suspended", "Suspended"
 
 
+
+# ---------------------------------------------------------------------------
+# Account security: email verification, password-reset tokens, session revokes
+# ---------------------------------------------------------------------------
+
+
+class EmailVerification(models.Model):
+    """Email verification tokens; one-time use, time-limited."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="email_verifications",
+    )
+    token = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    used = models.BooleanField(default=False)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.email} ({self.token[:8]})"
+
+    def save(self, *args, **kwargs):
+        if not self.token:
+            self.token = secrets.token_urlsafe(32)
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timezone.timedelta(hours=24)
+        super().save(*args, **kwargs)
+
+
+class PasswordResetToken(models.Model):
+    """Server-side, one-time-use password-reset tokens."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="password_reset_tokens",
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.user.email} ({self.token_hash[:8]})"
+
+    def save(self, *args, **kwargs):
+        if not self.token_hash:
+            self.token_hash = hashlib.sha256(secrets.token_urlsafe(32).encode("ascii")).hexdigest()
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timezone.timedelta(hours=1)
+        super().save(*args, **kwargs)
+
+
+class SessionRevocation(models.Model):
+    """High-water mark for invalidating all existing sessions on a user."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="current_session_revocation",
+    )
+    revision = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Session Revocation"
+        verbose_name_plural = "Session Revocations"
+
+    @classmethod
+    def next_revision(cls, user):
+        obj, _ = cls.objects.get_or_create(user=user)
+        obj.revision += 1
+        obj.save(update_fields=["revision", "created_at"])
+        return obj.revision
 class Shareholder(models.Model):
     code = models.CharField(max_length=12, unique=True)  # e.g. SH-001
     legal_name = models.CharField(max_length=150)

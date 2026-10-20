@@ -11,14 +11,20 @@ Business rules enforced here (never trust the client):
 """
 import re
 
+from django.conf import settings
+from django.contrib import auth
+from django.contrib.auth.models import update_last_login
+from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q as models_Q
 from django.utils import timezone
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from .models import (
     AuditLog,
@@ -27,15 +33,18 @@ from .models import (
     Customer,
     Document,
     Driver,
+    EmailVerification,
     Inquiry,
     Invoice,
     Lead,
     MaintenanceRecord,
     Meeting,
     Notification,
+    PasswordResetToken,
     Payment,
     Project,
     Role,
+    SessionRevocation,
     Shareholder,
     Task,
     Transaction,
@@ -58,12 +67,26 @@ from .serializers import (
     NotificationSerializer,
     PaymentSerializer,
     ProjectSerializer,
+    SessionVersionTokenRefreshSerializer,
     ShareholderSerializer,
     TaskSerializer,
     TransactionSerializer,
     TripSerializer,
     UserSerializer,
     VehicleSerializer,
+)
+
+
+from .serializers import (
+    UserRegistrationSerializer,
+    UserProfileSerializer,
+    TokenInputSerializer,
+    TokenResponseSerializer,
+    PasswordResetRequestSerializer,
+    PasswordResetConfirmSerializer,
+    PasswordChangeSerializer,
+    EmailVerificationSerializer,
+    LogoutSerializer,
 )
 
 
@@ -475,6 +498,21 @@ class InquiryViewSet(viewsets.ModelViewSet):
         serializer.save(reference=ref)
 
 
+class ResetTokenThrottle(AnonRateThrottle):
+    """Rate limit public password-reset requests per IP."""
+    rate = "10/minute"
+
+
+class ResetConfirmThrottle(AnonRateThrottle):
+    """Rate limit password-reset confirmation attempts per IP."""
+    rate = "5/minute"
+
+
+class LoginThrottle(UserRateThrottle):
+    """Rate limit login attempts per user."""
+    rate = "10/minute"
+
+
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def me(request):
@@ -536,3 +574,250 @@ def summary(request):
             "transactions": Transaction.objects.filter(status="Pending").count(),
         }
     return Response(data)
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([ResetTokenThrottle])
+def password_reset_request(request):
+    """POST /api/auth/password-reset/.
+
+    Accepts an email and sends a one-time-use reset link. Always returns the
+    same response whether or not the account exists.
+    """
+    serializer = PasswordResetRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    user = serializer.save(
+        ip_address=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+    )
+
+    if user is not None:
+        # Serializer.save() minted + stored the raw token on the instance.
+        token = serializer.reset_token
+        subject = "Password reset request"
+        message = (
+            "You requested a password reset for your Prime Horizon Group account.\n"
+            "Reset token: " + token + "\n"
+            "Use it at the reset page. This token is single-use and expires in 1 hour.\n"
+            "If you did not request a reset, please ignore this email."
+        )
+        try:
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=True,
+            )
+        except Exception:
+            pass
+
+    return Response(
+        {"detail": "If an account matches that email address, instructions will be sent shortly."},
+        status=status.HTTP_200_OK,
+    )
+
+
+
+# Signup: public registration with email verification before activation.
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def signup(request):
+    """POST /api/auth/signup/.
+
+    Validates email/username/password, creates the user with
+    ``is_active=False``, and sends a verification email. Duplicate accounts
+    are rejected. No role or privilege fields are accepted.
+    """
+    serializer = UserRegistrationSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    user = serializer.save()
+
+    # Send verification email.
+    verification = EmailVerification.objects.create(user=user)
+    subject = "Verify your Prime Horizon Group account"
+    message = (
+        "Welcome to Prime Horizon Group.\n\n"
+        "Your verification token is: " + verification.token + "\n"
+        "Use it at the email-verification endpoint to activate your account.\n"
+        "This token expires in 24 hours."
+    )
+    try:
+        send_mail(
+            subject,
+            message,
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
+    # Return a generic success message; do not disclose account state.
+    return Response(
+        {"detail": "Registration successful. Please check your email to verify your account."},
+        status=status.HTTP_201_CREATED,
+    )
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([ResetConfirmThrottle])
+def password_reset_confirm(request):
+    """POST /api/auth/password-reset/confirm/.
+
+    Validates the reset token, validates the new password, and saves it.
+    """
+    serializer = PasswordResetConfirmSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    serializer.save(
+        ip_address=request.META.get("REMOTE_ADDR"),
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+    )
+    return Response(
+        {"detail": "Password reset successful. Please sign in with your new password."},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def password_change(request):
+    """POST /api/auth/password-change/.
+
+    Requires the current password and changes to a new one. Revokes all
+    existing sessions for the user.
+    """
+    serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response(
+        {"detail": "Password changed successfully."},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([ResetConfirmThrottle])
+def email_verification(request):
+    """POST /api/auth/email-verification/.
+
+    Validates an email verification token and activates the account.
+    """
+    serializer = EmailVerificationSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    serializer.save(email=request.data.get("email", ""))
+    return Response(
+        {"detail": "Email verified. Your account is now active."},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout(request):
+    """POST /api/auth/logout/.
+
+    Revokes the refresh token server-side via the Simple JWT blacklist.
+    """
+    serializer = LogoutSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    refresh_token = serializer.save()
+
+    # Blacklist the refresh token so it cannot be reused.
+    from rest_framework_simplejwt.exceptions import TokenError
+
+    try:
+        RefreshToken(refresh_token).blacklist()
+    except TokenError:
+        pass
+    return Response(
+        {"detail": "Logged out successfully."},
+        status=status.HTTP_200_OK,
+    )
+
+
+# ---------------------------------------------------------------------------
+class SessionVersionTokenRefreshView(TokenRefreshView):
+    """Refresh view that enforces session-version revocation."""
+
+    serializer_class = SessionVersionTokenRefreshSerializer
+
+
+
+# Authentication endpoints
+# ---------------------------------------------------------------------------
+
+
+class TokenObtainPairView(TokenRefreshView):
+    """Custom token obtain view.
+
+    Uses Django's authentication under the hood so inactive users are
+    rejected and ``update_last_login`` runs. Accepts email or username and
+    returns role/status alongside the tokens.
+    """
+
+    serializer_class = TokenInputSerializer
+    throttle_classes = [LoginThrottle]
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        credentials = serializer.validated_data
+
+        email = credentials.get("email")
+        username = credentials.get("username")
+        password = credentials["password"]
+
+        user = None
+        if email:
+            try:
+                candidate = User.objects.get(email=email)
+            except User.DoesNotExist:
+                candidate = None
+            if candidate is not None and candidate.check_password(password):
+                user = candidate
+        else:
+            try:
+                candidate = User.objects.get(username=username)
+            except User.DoesNotExist:
+                candidate = None
+            if candidate is not None and candidate.check_password(password):
+                user = candidate
+
+        if user is None:
+            # Generic response: don't reveal whether the user exists.
+            UserModel = User
+            UserModel().set_password(password)
+            return Response(
+                {"detail": "Invalid credentials."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if not user.is_active:
+            return Response(
+                {"detail": "This account is inactive."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Log the user in (updates last_login, triggers rate throttle).
+        auth.login(request, user)
+        update_last_login(None, user)
+
+        token = RefreshToken.for_user(user)
+        token["session_version"] = user.session_version or 0
+
+        return Response(
+            TokenResponseSerializer({
+                "access": str(token.access_token),
+                "refresh": str(token),
+                "token_type": "Bearer",
+                "expires_in": token.access_token.lifetime.total_seconds(),
+                "role": user.role,
+                "status": user.status,
+                "user": UserProfileSerializer(user).data,
+            }).data
+        )
+
