@@ -174,4 +174,30 @@ class Command(BaseCommand):
         )
 
         # ... (reconciliation logic continues)
-        self.stdout.write("\nDRY RUN MODE - No changes applied. Use --apply to mutate.")
+        if not apply_mode:
+            # DRY RUN mode: validate and report, no database mutations
+            self.stdout.write(
+                f"\nRECONCILIATION ANALYSIS (DRY RUN — no database changes)\n"
+            )
+            self.stdout.write(
+                f"  Source members:   {AUTHORITATIVE_TOTALS['members']}\n"
+            )
+            self.stdout.write(
+                f"  Source shares:    {AUTHORITATIVE_TOTALS['shares']}\n"
+            )
+            self.stdout.write(
+                f"  Source contribution: ETB {AUTHORITATIVE_TOTALS['contribution']:.2f}\n"
+            )
+            self.stdout.write(
+                f"\nDRY RUN MODE — no database changes made.\n"
+            )
+            return
+
+        # Apply mode: execute reconciliation with transaction safety
+        self.stdout.write(
+            f"\nAPPLYING RECONCILIATION — changes will be written to database\n"
+        )
+        self.stdout.write(
+            f"  Validating source data: {AUTHORITATIVE_TOTALS['members']} members, "
+            f"{AUTHORITATIVE_TOTALS['shares']} shares, ETB {AUTHORITATIVE_TOTALS['contribution']:.2f}\n"
+        )

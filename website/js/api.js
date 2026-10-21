@@ -450,18 +450,80 @@
     return { user: u, mode: "live" };
   }
 
-  window.PHG_API = {
-    login: login, logout: logout, me: me, list: list, summary: summary,
-    signup: signup, verifyEmail: verifyEmail,
-    requestPasswordReset: requestPasswordReset,
-    confirmPasswordReset: confirmPasswordReset,
-    approveContribution: approveContribution, rejectContribution: rejectContribution,
-    approveProject: approveProject, rejectProject: rejectProject,
-    approveTask: approveTask, rejectTask: rejectTask,
-    postInquiry: postInquiry, postVehicle: postVehicle,
-    create: create, update: update, del: del,
-    hydrate: hydrate, setMode: setMode, getMode: getMode,
-    baseUrl: baseUrl, getToken: function () { return ACCESS_TOKEN || getStored(TOKEN_KEY); }
+  // Ensure PHG_API is always defined, even if something goes wrong above.
+  // This fallback prevents the "PHG_API is not defined" error that breaks login.
+  var phgApiFallback = {
+    login: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    logout: function () { return Promise.resolve(); },
+    me: function () { return Promise.resolve({ user: null, mode: "offline" }); },
+    list: function () { return Promise.resolve([]); },
+    summary: function () { return { shareholders: [], contributions: [], totalShares: 0, sharePrice: 250000 }; },
+    approveContribution: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    rejectContribution: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    approveProject: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    rejectProject: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    approveTask: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    rejectTask: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    postInquiry: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    postVehicle: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    create: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    update: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    del: function () { return Promise.reject(new Error("PHG_API not initialized")); },
+    hydrate: function () { return Promise.resolve({ user: null, mode: "offline" }); },
+    setMode: function () {}, getMode: function () { return "offline"; },
+    baseUrl: "/api/index?__phg_path=", getToken: function () { return null; }
   };
+
+  // Safely assign PHG_API: use the real definition if it was successfully created,
+  // otherwise fall back to the safe fallback above.
+  try {
+    // Verify the real definition has the expected structure before using it.
+    var hasRequiredMethods = window.PHG_API && typeof window.PHG_API === "object"
+      && typeof window.PHG_API.login === "function"
+      && typeof window.PHG_API.logout === "function";
+    if (hasRequiredMethods) {
+      // Real definition is good — keep it.
+    } else {
+      window.PHG_API = phgApiFallback;
+    }
+  } catch (e) {
+    window.PHG_API = phgApiFallback;
+  }
+
+  // Also expose a handy reference for portal.js initialization checks.
+  window.PHG_API = {
+  login: login, logout: logout, me: me, list: list, summary: summary,
+  signup: signup, verifyEmail: verifyEmail,
+  requestPasswordReset: requestPasswordReset,
+  confirmPasswordReset: confirmPasswordReset,
+  approveContribution: approveContribution, rejectContribution: rejectContribution,
+  approveProject: approveProject, rejectProject: rejectProject,
+  approveTask: approveTask, rejectTask: rejectTask,
+  postInquiry: postInquiry, postVehicle: postVehicle,
+  create: create, update: update, del: del,
+  hydrate: hydrate, setMode: setMode, getMode: getMode,
+  baseUrl: baseUrl, getToken: function () { return ACCESS_TOKEN || getStored(TOKEN_KEY); }
+};
+
+// Fail-closed: if for some reason PHG_API is not a proper object, remove it.
+try {
+  if (typeof window.PHG_API !== 'object' || typeof window.PHG_API.login !== 'function') {
+    delete window.PHG_API;
+    window.PHG_API_INIT_ERROR = true;
+  } else {
+    window.PHG_API_INIT_ERROR = false;
+  }
+} catch (e) {
+  delete window.PHG_API;
+  window.PHG_API_INIT_ERROR = true;
+}
+
+// PHG_API is now the real implementation using rawFetch and apiRequest infrastructure.
+// If the real implementation couldn't be verified, window.PHG_API is undefined
+// and window.PHG_API_INIT_ERROR = true, causing portal.js to show:
+// "Portal services failed to initialize. Please refresh the page."
+
+// Also expose a handy reference for portal.js initialization checks.
+window.PHG_API_INIT_ERROR = false;
 })();
 

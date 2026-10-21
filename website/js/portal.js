@@ -217,8 +217,18 @@
       } catch (err2) {
         console.error("login pipeline error:", err2);
         var d = err2 && err2.body && (err2.body.detail || err2.body.email || err2.body.password);
-        err.textContent = d ? ("Login failed: " + d)
-          : ("Login failed: " + ((err2 && (err2.message || String(err2))) || "unknown error"));
+        // Check if this is a PHG_API initialization error (not a real auth failure)
+        var isInitError = !window.PHG_API || typeof window.PHG_API !== "object"
+          || (err2 && err2.message && err2.message.indexOf("PHG_API not initialized") !== -1);
+        if (isInitError) {
+          // Portal services failed to initialize — do not expose internal JS errors as auth failures
+          err.textContent = "Portal services failed to initialize. Please refresh the page.";
+          console.error("PHG_API initialization failure, portal cannot start:", err2);
+        } else {
+          err.textContent = d ? ("Login failed: " + d)
+            : ("Login failed: " + ((err2 && (err2.message || String(err2))) || "unknown error"));
+          console.error("Login error:", err2);
+        }
         err.classList.add("show");
       }
     });
