@@ -8,3 +8,4 @@ node_modules/
 .env.development.local
 npm_install.txt
 verify_eon.ps1
+neon_setup.sql
