@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from .models import (
     Role, User, Shareholder, Contribution, ContributionStatus,
-    Vehicle, Transaction, Notification,
+    Vehicle, Transaction, Notification, Driver, Trip,
 )
 
 UserModel = get_user_model()
@@ -35,6 +35,7 @@ class CRUDTestBase(APITestCase):
     def setUp(self):
         self.gm = make_user("gm@test.et", Role.GM, username="gm")
         self.finance = make_user("finance@test.et", Role.FINANCE, username="finance")
+        self.admin = make_user("admin@test.et", Role.ADMIN, username="admin")
         self.shareholder = make_user("sh@test.et", Role.SHAREHOLDER, username="sh")
         self.auditor = make_user("aud@test.et", Role.AUDITOR, username="aud")
         self.client = auth_client_for(self.gm)
@@ -425,3 +426,87 @@ class UserLifecycleTests(CRUDTestBase):
         self.assertEqual(target.status, "Inactive")
         self.assertFalse(target.is_active)
         self.assertTrue(get_user_model().objects.filter(email="gone@test.et").exists())
+
+
+
+class AdminCRUDTests(CRUDTestBase):
+    """System Administrator has CRUD across ordinary business resources."""
+
+    def test_admin_can_create_shareholder(self):
+        client = auth_client_for(self.admin)
+        r = client.post("/api/shareholders/", {
+            "name": "Admin Created", "email": "ac@example.et",
+            "shares": 1, "share_price": "250000.00", "paid": "0.00",
+            "status": "Active",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_admin_can_create_vehicle(self):
+        client = auth_client_for(self.admin)
+        r = client.post("/api/vehicles/", {
+            "plate": "AA-1234", "make": "Toyota", "model": "Corolla",
+            "year": 2022, "category": "Sedan", "status": "Available",
+            "odometer": 1000, "insurance": "2027-01-01", "purchase": "1000000.00",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_admin_can_create_driver(self):
+        client = auth_client_for(self.admin)
+        r = client.post("/api/drivers/", {
+            "name": "Admin Driver", "licence": "B", "phone": "0911",
+            "trips": 0, "status": "Active",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_admin_can_create_trip(self):
+        Vehicle.objects.create(code="VH-01", plate="AA-1", make="T", model="C",
+                               year=2022, category="Sedan", status="Available",
+                               insurance_until=__import__("datetime").date(2027,1,1),
+                               purchase_cost=__import__("decimal").Decimal("1000000"))
+        Driver.objects.create(code="DR-1", name="D", licence_class="B", status="Active")
+        client = auth_client_for(self.admin)
+        r = client.post("/api/trips/", {
+            "customer": "Cust", "vehicle": "AA-1", "driver": "D",
+            "route": "A-B", "start": "2026-03-01", "end": "2026-03-02",
+            "price": "1000.00", "fuel": "100.00", "status": "Booked",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+
+    def test_admin_can_update_and_delete_shareholder(self):
+        Shareholder.objects.create(code="SH-001", legal_name="Orig", shares=1,
+                                   paid=__import__("decimal").Decimal("0"))
+        client = auth_client_for(self.admin)
+        r = client.patch("/api/shareholders/SH-001/", {"paid": "100.00"})
+        self.assertEqual(r.status_code, 200, r.content)
+        r2 = client.delete("/api/shareholders/SH-001/")
+        self.assertEqual(r2.status_code, 204, r2.content)
+        self.assertFalse(Shareholder.objects.filter(code="SH-001").exists())
+
+
+class ExtendedRoleRestrictionTests(CRUDTestBase):
+    def test_shareholder_cannot_create_vehicle(self):
+        client = auth_client_for(self.shareholder)
+        r = client.post("/api/vehicles/", {"plate": "X", "make": "M", "model": "M",
+                                           "year": 2020, "category": "Sedan",
+                                           "status": "Available", "odometer": 0,
+                                           "insurance": "2027-01-01", "purchase": "1.00"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_auditor_cannot_create_driver(self):
+        client = auth_client_for(self.auditor)
+        r = client.post("/api/drivers/", {"name": "X", "licence": "B", "status": "Active"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_shareholder_cannot_delete_trip(self):
+        Vehicle.objects.create(code="VH-01", plate="AA-1", make="T", model="C",
+                               year=2022, category="Sedan", status="Available",
+                               insurance_until=__import__("datetime").date(2027,1,1),
+                               purchase_cost=__import__("decimal").Decimal("1000000"))
+        Driver.objects.create(code="DR-1", name="D", licence_class="B", status="Active")
+        Trip.objects.create(code="TR-0001", customer_name="C", vehicle_plate="AA-1",
+                            driver="D", route="A-B", start_date=__import__("datetime").date(2026,3,1),
+                            end_date=__import__("datetime").date(2026,3,2), price=__import__("decimal").Decimal("1000"),
+                            fuel_cost=__import__("decimal").Decimal("100"), status="Booked")
+        client = auth_client_for(self.shareholder)
+        r = client.delete("/api/trips/TR-0001/")
+        self.assertEqual(r.status_code, 403)

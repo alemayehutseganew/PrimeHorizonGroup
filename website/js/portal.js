@@ -82,13 +82,15 @@
   }
   // §7.2/§7.3 helper: generic modal create-form that POSTs real data.
   // No demo fallback — validation errors stay on the form (§7.2).
-  function openFormModal(title, fields, onSubmit) {
+  function openFormModal(title, fields, onSubmit, initial) {
+    initial = initial || {};
     var ov = document.createElement("div");
     ov.className = "modal-overlay";
     ov.style.cssText = "position:fixed;inset:0;background:rgba(16,41,74,.5);display:flex;align-items:center;justify-content:center;z-index:200;";
     var inputs = fields.map(function (f, i) {
+      var val = (initial[f.name] !== undefined && initial[f.name] !== null) ? initial[f.name] : "";
       return '<label style="display:block;margin:8px 0;font-size:.85rem">' + esc(f.label) +
-        '<input data-f="' + i + '" type="text" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #cbd5e1;border-radius:8px" /></label>';
+        '<input data-f="' + i + '" type="text" value="' + esc(String(val)) + '" style="display:block;width:100%;margin-top:4px;padding:8px;border:1px solid #cbd5e1;border-radius:8px" /></label>';
     }).join("");
     ov.innerHTML = '<div style="background:#fff;border-radius:12px;padding:20px;min-width:320px;max-width:440px">' +
       "<h3 style='margin:0 0 8px'>" + esc(title) + "</h3>" +
@@ -576,7 +578,8 @@
     var html = pageHead("Shareholder Register",
       "14 founders · " + totalShares + " shares issued (planning scenario) · share price " + fmtETB(D.sharePrice),
       (session.role === "finance" || session.role === "gm" || session.role === "admin")
-        ? '<button class="btn btn-outline" id="btnExportSH">Export CSV</button>' : "");
+        ? '<button class="btn btn-outline" id="btnExportSH">Export CSV</button> ' +
+          '<button class="btn btn-primary" id="btnAddSH">+ Add Shareholder</button>' : "");
 
     html += '<div class="stat-row">';
     html += statCard("users", "", D.shareholders.length, "Registered shareholders");
@@ -598,19 +601,110 @@
         '<td class="num">' + fmtETB(sh.shares * D.sharePrice) + "</td>" +
         '<td class="num">' + fmtETB(sh.paid) + "</td>" +
         '<td class="num">' + fmtETB(outstanding) + "</td>" +
-        "<td>" + payBadge + "</td><td>" + sh.joined + "</td></tr>";
+        "<td>" + payBadge + "</td><td>" + sh.joined + "</td>" +
+        "<td>" + ((session.role === "finance" || session.role === "gm" || session.role === "admin")
+          ? '<button class="btn btn-outline btn-xs" data-edit-sh="' + sh.id + '">Edit</button> ' +
+            '<button class="btn btn-danger btn-xs" data-del-sh="' + sh.id + '">Delete</button>'
+          : "—") + "</td></tr>";
     });
 
     html += panel("Register", "Ownership % = shareholder shares ÷ total issued shares × 100",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
       "<th>ID</th><th>Shareholder</th><th class='num'>Shares</th><th class='num'>Ownership</th>" +
-      "<th class='num'>Commitment</th><th class='num'>Paid</th><th class='num'>Outstanding</th><th>Status</th><th>Admitted</th>" +
+      "<th class='num'>Commitment</th><th class='num'>Paid</th><th class='num'>Outstanding</th><th>Status</th><th>Admitted</th><th>Actions</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>",
       "", true);
 
     html += '<p style="font-size:0.76rem; color:var(--text-muted)">Business rule: issued shares, authorized shares, promised contributions and paid-in capital are tracked as distinct quantities. Ownership changes are recorded as events with approval — never silently overwritten. Contact details are stored privately and shown only to authorized roles.</p>';
 
     content().innerHTML = html;
+
+    // delegate delete buttons
+    document.querySelectorAll("[data-del-sh]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-del-sh");
+        confirmModal("Delete shareholder", "Delete " + id + "? This cannot be undone.", function () {
+          PHG_API.del("shareholders", id).then(function () {
+            toast("Shareholder deleted.", "success");
+            refreshLiveData();
+          }).catch(function (e) {
+            toast("Delete failed: " + apiError(e), "error");
+          });
+        });
+      });
+    });
+
+    // delegate edit buttons
+    document.querySelectorAll("[data-edit-sh]").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var id = b.getAttribute("data-edit-sh");
+        var rec = (data().shareholders || []).filter(function (x) { return x.id === id; })[0];
+        if (!rec) { toast("Record not found.", "error"); return; }
+        openFormModal("Edit Shareholder", [
+          { name: "name", label: "Legal name", required: true },
+          { name: "email", label: "Email", required: false },
+          { name: "phone", label: "Phone", required: false },
+          { name: "country", label: "Country", required: false },
+          { name: "shares", label: "Shares", required: true },
+          { name: "share_price", label: "Share price", required: false },
+          { name: "paid", label: "Paid-in", required: false },
+          { name: "status", label: "Status (Active/Inactive/Suspended)", required: false }
+        ], function (vals, done) {
+          var payload = {
+            name: vals.name,
+            email: vals.email || "",
+            phone: vals.phone || "",
+            country: vals.country || "",
+            shares: parseInt(vals.shares, 10) || 0,
+            share_price: vals.share_price || rec.share_price,
+            paid: vals.paid || "0.00",
+            status: vals.status || rec.status
+          };
+          PHG_API.update("shareholders", id, payload).then(function () {
+            toast("Shareholder updated.", "success");
+            refreshLiveData();
+          }).catch(function (e) {
+            toast("Update failed: " + apiError(e), "error");
+          });
+          done(null);
+        }, {
+          name: rec.name, email: rec.email, phone: rec.phone, country: rec.country,
+          shares: rec.shares, share_price: rec.share_price, paid: rec.paid, status: rec.status
+        });
+      });
+    });
+
+    var addSh = el("btnAddSH");
+    if (addSh) addSh.addEventListener("click", function () {
+      openFormModal("Add Shareholder", [
+        { name: "name", label: "Legal name", required: true },
+        { name: "email", label: "Email", required: false },
+        { name: "phone", label: "Phone", required: false },
+        { name: "country", label: "Country", required: false },
+        { name: "shares", label: "Shares", required: true },
+        { name: "share_price", label: "Share price", required: false },
+        { name: "paid", label: "Paid-in", required: false },
+        { name: "status", label: "Status (Active/Inactive/Suspended)", required: false }
+      ], function (vals, done) {
+        var payload = {
+          name: vals.name,
+          email: vals.email || "",
+          phone: vals.phone || "",
+          country: vals.country || "",
+          shares: parseInt(vals.shares, 10) || 0,
+          share_price: vals.share_price || "250000.00",
+          paid: vals.paid || "0.00",
+          status: vals.status || "Active"
+        };
+        PHG_API.create("shareholders", payload).then(function () {
+          toast("Shareholder added.", "success");
+          refreshLiveData();
+        }).catch(function (e) {
+          toast("Create failed: " + apiError(e), "error");
+        });
+        done(null);
+      });
+    });
 
     var btn = el("btnExportSH");
     if (btn) btn.addEventListener("click", function () {
@@ -724,7 +818,7 @@
   VIEWS.vehicles = function () {
     var fleetValue = D.vehicles.reduce(function (s, v) { return s + v.purchase; }, 0);
     var html = pageHead("Vehicles", "Fleet asset register with insurance, odometer and status tracking.",
-      session.role === "transport" || session.role === "gm"
+      session.role === "transport" || session.role === "gm" || session.role === "admin"
         ? '<button class="btn btn-primary" id="btnAddVeh">+ Add Vehicle</button>' : "");
 
     html += '<div class="stat-row">';
@@ -809,7 +903,7 @@
     var revenue = D.trips.reduce(function (s, t) { return s + t.price; }, 0);
     var fuel = D.trips.reduce(function (s, t) { return s + t.fuel; }, 0);
     var html = pageHead("Trips & Bookings", "Trip records link customer, vehicle, driver, route and cost.",
-      session.role === "transport" || session.role === "gm"
+      session.role === "transport" || session.role === "gm" || session.role === "admin"
         ? '<button class="btn btn-primary" id="btnAddTrip">+ Book Trip</button>' : "");
 
     html += '<div class="stat-row">';
@@ -878,7 +972,7 @@
   /* ---------- Drivers ---------- */
   VIEWS.drivers = function () {
     var html = pageHead("Drivers", "Driver roster with licence class, status and trip history. Only licensed drivers are assigned to trips.",
-      session.role === "transport" || session.role === "gm"
+      session.role === "transport" || session.role === "gm" || session.role === "admin"
         ? '<button class="btn btn-primary" id="btnAddDriver">+ Add Driver</button>' : "");
 
     html += '<div class="stat-row">';
