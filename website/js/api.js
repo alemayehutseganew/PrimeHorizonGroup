@@ -215,6 +215,30 @@
       { method: "POST", body: JSON.stringify(note ? { note: note } : {}) });
   }
   function rejectContribution(code, note) {
+    return apiRequest("/contributions/" + encodeURIComponent(code) + "/reject",
+      { method: "POST", body: JSON.stringify({ note: note || "" }) });
+  }
+
+  function approveProject(id) {
+    return apiRequest("/projects/" + encodeURIComponent(id) + "/approve",
+      { method: "POST" });
+  }
+
+  function rejectProject(id, note) {
+    return apiRequest("/projects/" + encodeURIComponent(id) + "/reject",
+      { method: "POST", body: JSON.stringify({ note: note || "" }) });
+  }
+
+  function approveTask(id) {
+    return apiRequest("/tasks/" + encodeURIComponent(id) + "/approve",
+      { method: "POST" });
+  }
+
+  function rejectTask(id, note) {
+    return apiRequest("/tasks/" + encodeURIComponent(id) + "/reject",
+      { method: "POST", body: JSON.stringify({ note: note || "" }) });
+  }
+}
     return apiRequest("/contributions/" + encodeURIComponent(code) + "/reject/",
       { method: "POST", body: JSON.stringify({ note: note || "" }) });
   }
@@ -432,6 +456,8 @@
     requestPasswordReset: requestPasswordReset,
     confirmPasswordReset: confirmPasswordReset,
     approveContribution: approveContribution, rejectContribution: rejectContribution,
+    approveProject: approveProject, rejectProject: rejectProject,
+    approveTask: approveTask, rejectTask: rejectTask,
     postInquiry: postInquiry, postVehicle: postVehicle,
     create: create, update: update, del: del,
     hydrate: hydrate, setMode: setMode, getMode: getMode,

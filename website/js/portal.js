@@ -168,7 +168,21 @@
       var me = await PHG_API.me();
       var mu = (me && me.user) || {};
       var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || "";
-      session = { email: mu.email || "", name: nm, role: mu.role || "shareholder", title: mu.title || mu.role || "" };
+      var role = String(mu.role || "").trim().toLowerCase();
+      if (!role) {
+          // Invalidate session — no role means not authenticated
+          session = null;
+          // Show authentication/authorization error and return to login
+          return;
+      }
+      // Validate role against known application roles
+      // Unknown roles must fail closed — do not grant shareholder access
+      if (ROLE_VIEWS[role] === undefined) {
+          // Unknown role — fail closed
+          session = null;
+          return;
+      }
+      session = { email: mu.email || "", name: nm, role: role, title: mu.title || mu.role || "" };
       startApp();
       return true;
     } catch (e) {
@@ -198,7 +212,6 @@
         var me = await PHG_API.me();
         var mu = me.user || {};
         var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || email;
-        session = { email: email, name: nm, role: mu.role || "shareholder", title: mu.title || mu.role || "" };
         startApp();
         return;
       } catch (err2) {
@@ -348,7 +361,7 @@
     D = window.PHG_DATA || D;
     syncNotifications();
     PHG_API.setMode("live");
-    var modeBadge = PHG_API.getMode() === "offline" ? ' <span style="font-size:0.72rem;color:#d97706">● OFFLINE</span>' : '';
+    var modeBadge = PHG_API.getMode() === "offline" ? ' <span style="font-size:0.72rem;color:#d97706">�? OFFLINE</span>' : '';
     el("loginScreen").style.display = "none";
     el("portalShell").classList.add("active");
     el("topbarTitle").innerHTML = VIEW_META.dashboard.title + modeBadge;

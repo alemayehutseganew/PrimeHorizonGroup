@@ -549,6 +549,24 @@ class LoginThrottle(AnonRateThrottle):
 def me(request):
     """Current user profile + allowed frontend views."""
     from .permissions import VIEW_ROLES
+    user = request.user
+    if user.is_authenticated:
+        role = user.role
+        status_val = user.status
+        allowed = VIEW_ROLES.get(role, [])
+        from .serializers import UserProfileSerializer
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        if not isinstance(user, User):
+            user = User.objects.get(pk=user.pk)
+        profile_serializer = UserProfileSerializer(user)
+        return Response({
+            'user': profile_serializer.data,
+            'role': role,
+            'status': status_val,
+            'allowed_views': allowed,
+        })
+    return Response({'detail': 'Not authenticated'}, status=401)
     allowed = [v for v, roles in VIEW_ROLES.items()
                if roles is None or request.user.role in roles]
     return Response({
