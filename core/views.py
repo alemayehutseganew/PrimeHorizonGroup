@@ -167,6 +167,7 @@ class ShareholderViewSet(BaseViewSet):
     queryset = Shareholder.objects.prefetch_related("contributions").all()
     serializer_class = ShareholderSerializer
     view_name = "shareholders"
+    code_prefix = ("SH", 3)
     filterset_fields = ["status"]
     search_fields = ["code", "legal_name", "email"]
     ordering_fields = ["code", "shares", "paid"]
@@ -274,6 +275,7 @@ class InvoiceViewSet(BaseViewSet):
     queryset = Invoice.objects.prefetch_related("payments").all()
     serializer_class = InvoiceSerializer
     view_name = "invoices"
+    code_prefix = ("INV", 4)
     filterset_fields = ["status"]
     search_fields = ["code", "customer_name"]
     ordering_fields = ["issued_on", "total"]
@@ -329,6 +331,7 @@ class LeadViewSet(BaseViewSet):
     queryset = Lead.objects.all()
     serializer_class = LeadSerializer
     view_name = "leads"
+    code_prefix = ("LD", 2)
     filterset_fields = ["stage", "source"]
     search_fields = ["code", "service"]
 
@@ -337,6 +340,7 @@ class VehicleViewSet(BaseViewSet):
     queryset = Vehicle.objects.all()
     serializer_class = VehicleSerializer
     view_name = "vehicles"
+    code_prefix = ("VH", 2)
     filterset_fields = ["status", "category"]
     search_fields = ["code", "plate"]
 
@@ -345,6 +349,7 @@ class DriverViewSet(BaseViewSet):
     queryset = Driver.objects.all()
     serializer_class = DriverSerializer
     view_name = "drivers"
+    code_prefix = ("DR", 1)
     filterset_fields = ["status"]
     search_fields = ["code", "name"]
 
@@ -353,6 +358,7 @@ class TripViewSet(BaseViewSet):
     queryset = Trip.objects.all()
     serializer_class = TripSerializer
     view_name = "trips"
+    code_prefix = ("TR", 4)
     filterset_fields = ["status"]
     search_fields = ["code", "customer_name", "route"]
     ordering_fields = ["start_date", "price"]
@@ -362,6 +368,7 @@ class MaintenanceViewSet(BaseViewSet):
     queryset = MaintenanceRecord.objects.all()
     serializer_class = MaintenanceSerializer
     view_name = "maintenance"
+    code_prefix = ("MT", 3)
     filterset_fields = ["status"]
     search_fields = ["code", "vehicle_plate", "provider"]
 
@@ -370,6 +377,7 @@ class ProjectViewSet(BaseViewSet):
     queryset = Project.objects.prefetch_related("tasks").all()
     serializer_class = ProjectSerializer
     view_name = "projects"
+    code_prefix = ("PR", 3)
     filterset_fields = ["status", "division"]
     search_fields = ["code", "name", "customer_name"]
 
@@ -378,6 +386,7 @@ class TaskViewSet(BaseViewSet):
     queryset = Task.objects.select_related("project").all()
     serializer_class = TaskSerializer
     view_name = "tasks"
+    code_prefix = ("TK", 3)
     filterset_fields = ["status", "priority"]
     search_fields = ["code", "title", "assignee"]
 
@@ -386,6 +395,7 @@ class MeetingViewSet(BaseViewSet):
     queryset = Meeting.objects.all()
     serializer_class = MeetingSerializer
     view_name = "meetings"
+    code_prefix = ("MTG", 3)
     filterset_fields = ["status", "kind"]
 
 
@@ -393,6 +403,7 @@ class DocumentViewSet(BaseViewSet):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
     view_name = "documents"
+    code_prefix = ("DOC", 2)
     filterset_fields = ["category"]
     search_fields = ["code", "name"]
 class NotificationViewSet(viewsets.ModelViewSet):

@@ -46,6 +46,19 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
 CORS_ALLOW_HEADERS = ["content-type", "authorization", "content-length", "accept", "origin", "x-requested-with", "sec-fetch-mode", "sec-fetch-site", "user-agent", "cache-control"]
 
+# CSRF trusted origins - required so the Vercel frontend can POST/PUT/PATCH
+# DELETE to the Django API. Without this, CsrfViewMiddleware rejects
+# cross-origin API calls with CSRF token missing.
+_csrf_env = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [
+    o.strip() for o in _csrf_env.split(",") if o.strip()
+] or ["http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:5500", "http://localhost:5500"]
+if _vercel_url:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{_vercel_url}")
+if os.environ.get("VERCEL"):
+    if "https://.vercel.app" not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append("https://.vercel.app")
+
 
 # Applications ---------------------------------------------------------------
 INSTALLED_APPS = [
