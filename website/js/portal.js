@@ -1583,4 +1583,208 @@
     }
     startPoll();
   });
+  /* ---------- Maintenance CRUD ---------- */
+  VIEWS.maintenance = function () {
+    var canEdit = session.role === "admin" || session.role === "gm" || session.role === "transport";
+    var html = pageHead("Maintenance Records", "Full service history per vehicle.", canEdit ? '<button class="btn btn-primary" id="btnAddMaintenance">+ Add Record</button>' : "");
+    var rows = "";
+    (D.maintenance || []).forEach(function (m) {
+      var id = m.id || m.code;
+      rows += "<tr><td><strong>" + id + "</strong></td><td>" + (m.vehicle || "-") + "</td><td>" + (m.date || "-") + "</td><td>" + (m.provider || "-") + "</td><td>" + (m.work || "-") + "</td>" +
+        '<td class="num">' + (m.cost || 0) + "</td><td>" + (m.next || "-") + "</td><td>" + (m.status || "-") + "</td>" +
+        "<td>" + (canEdit ? '<button class="mv-' + id + '" data-id="' + id + '">View</button> <button class="me-' + id + '" data-id="' + id + '">Edit</button> <button class="md-' + id + '" data-id="' + id + '">Delete</button>' : "View-only") + "</td></tr>";
+    });
+    html += panel("Service history", (D.maintenance || []).length + " records", '<div class="table-scroll"><table class="pt"><thead><tr><th>Record</th><th>Vehicle</th><th>Date</th><th>Provider</th><th>Work</th><th class="num">Cost</th><th>Next</th><th>Status</th><th>Actions</th></tr></thead><tbody>' + rows + "</tbody></table></div>", "", true);
+    content().innerHTML = html;
+    (D.maintenance || []).forEach(function (m) {
+      var id = m.id || m.code;
+      var vb = el("mv-" + id), eb = el("me-" + id), db = el("md-" + id);
+      if (vb) vb.addEventListener("click", function () { alert("Maintenance " + id + "\\nVehicle: " + (m.vehicle||"N/A") + "\\nDate: " + (m.date||"N/A") + "\\nWork: " + (m.work||"N/A") + "\\nStatus: " + (m.status||"N/A")); });
+      if (eb) eb.addEventListener("click", function () { openMaintEditModal(m); });
+      if (db) db.addEventListener("click", function () { confirmModal("Delete " + id, "Delete maintenance record?", function () { PHG_API.del("maintenance", id).then(function(){toast(id+" deleted.","success");navigate("maintenance");}).catch(function(e){toast("Delete failed: "+apiError(e),"error");}); }); });
+    });
+    var ab = el("btnAddMaintenance");
+    if (ab) ab.addEventListener("click", function () {
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Add Maintenance Record";
+      body.innerHTML = '<div class="form-group"><label>Vehicle Plate</label><input type="text" class="form-control" id="mVehicle" placeholder="VH-001"></div>' +
+        '<div class="form-group"><label>Service Date</label><input type="date" class="form-control" id="mDate"></div>' +
+        '<div class="form-group"><label>Provider</label><input type="text" class="form-control" id="mProvider"></div>' +
+        '<div class="form-group"><label>Work</label><input type="text" class="form-control" id="mWork"></div>' +
+        '<div class="form-group"><label>Cost</label><input type="number" class="form-control" id="mCost" step="0.01"></div>' +
+        '<div class="form-group"><label>Next Due</label><input type="date" class="form-control" id="mNext"></div>' +
+        '<div class="form-group"><label>Status</label><select class="form-control" id="mStatus"><option>Completed</option><option>In progress</option><option>Scheduled</option><option>Cancelled</option></select></div>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Create";
+      el("modalOk").onclick = async function () {
+        var p = { vehicle: el("mVehicle").value.trim(), date: el("mDate").value.trim()||null, provider: el("mProvider").value.trim(), work: el("mWork").value.trim(), cost: parseFloat(el("mCost").value)||0, next: el("mNext").value.trim()||null, status: el("mStatus").value };
+        if (!p.vehicle) { toast("Vehicle required","error"); return; }
+        try { await PHG_API.create("maintenance", p); mb.style.display="none"; toast("Created.","success"); navigate("maintenance"); } catch(e){toast("Failed: "+apiError(e),"error");}
+      };
+      mb.style.display = "flex";
+    });
+  };
+
+
+  function openMaintEditModal(m) {
+    var mb = el("modalBackdrop"), body = el("modalBody");
+    var id = m.id || m.code;
+    el("modalTitle").textContent = "Edit Maintenance " + id;
+    body.innerHTML = '<div class="form-group"><label>Vehicle Plate</label><input type="text" class="form-control" id="mVehicle" value="' + esc(m.vehicle || "") + '"></div>' +
+      '<div class="form-group"><label>Service Date</label><input type="date" class="form-control" id="mDate" value="' + (m.date || "") + '"></div>' +
+      '<div class="form-group"><label>Provider</label><input type="text" class="form-control" id="mProvider" value="' + esc(m.provider || "") + '"></div>' +
+      '<div class="form-group"><label>Work</label><input type="text" class="form-control" id="mWork" value="' + esc(m.work || "") + '"></div>' +
+      '<div class="form-group"><label>Cost</label><input type="number" class="form-control" id="mCost" step="0.01" value="' + (m.cost || 0) + '"></div>' +
+      '<div class="form-group"><label>Next Due</label><input type="date" class="form-control" id="mNext" value="' + (m.next || "") + '"></div>' +
+      '<div class="form-group"><label>Status</label><select class="form-control" id="mStatus"><option' + (m.status === "Completed" ? " selected" : "") + '>Completed</option><option' + (m.status === "In progress" ? " selected" : "") + '>In progress</option><option' + (m.status === "Scheduled" ? " selected" : "") + '>Scheduled</option><option' + (m.status === "Cancelled" ? " selected" : "") + '>Cancelled</option></select></div>';
+    el("modalCancel").style.display = "inline-block";
+    el("modalOk").style.display = "inline-block";
+    el("modalOk").textContent = "Save";
+    el("modalOk").onclick = async function () {
+      var p = { vehicle: el("mVehicle").value.trim(), date: el("mDate").value.trim() || null, provider: el("mProvider").value.trim(), work: el("mWork").value.trim(), cost: parseFloat(el("mCost").value) || 0, next: el("mNext").value.trim() || null, status: el("mStatus").value };
+      try { await PHG_API.update("maintenance", id, p); mb.style.display = "none"; toast(id + " updated.", "success"); navigate("maintenance"); } catch (e) { toast("Update failed: " + apiError(e), "error"); }
+    };
+    mb.style.display = "flex";
+  }
+
+
+  /* ---------- Projects CRUD ---------- */
+  VIEWS.projects = function () {
+    var canEdit = session.role === "admin" || session.role === "gm";
+    var html = pageHead("Projects", "Project register.", canEdit ? '<button class="btn btn-primary" id="btnAddProject">+ Add Project</button>' : "");
+    var rows = "";
+    (D.projects || []).forEach(function (p) {
+      var id = p.id || p.code;
+      rows += "<tr><td><strong>" + id + "</strong></td><td>" + (p.name || "-") + "</td><td>" + (p.customer || "-") + "</td><td>" + (p.division || "-") + "</td><td>" + (p.manager || "-") + "</td>" +
+        '<td class="num">' + (p.value || 0) + "</td><td>" + (p.status || "-") + "</td><td>" + (p.priority || "-") + "</td>" +
+        "<td>" + (canEdit ? '<button class="pv-' + id + '">View</button> <button class="pe-' + id + '">Edit</button> <button class="pa-' + id + '">Archive</button>' : "View-only") + "</td></tr>";
+    });
+    html += panel("Project register", (D.projects || []).length + " projects", '<div class="table-scroll"><table class="pt"><thead><tr><th>Project</th><th>Name</th><th>Customer</th><th>Division</th><th>Manager</th><th class="num">Value</th><th>Status</th><th>Priority</th><th>Actions</th></tr></thead><tbody>' + rows + "</tbody></table></div>", "", true);
+    content().innerHTML = html;
+    (D.projects || []).forEach(function (p) {
+      var id = p.id || p.code;
+      var vb = el("pv-" + id), eb = el("pe-" + id), ab = el("pa-" + id);
+      if (vb) vb.addEventListener("click", function () { alert("Project " + id + "\\nName: " + (p.name||"N/A") + "\\nCustomer: " + (p.customer||"N/A") + "\\nStatus: " + (p.status||"N/A")); });
+      if (eb) eb.addEventListener("click", function () { openProjectEditModal(p); });
+      if (ab) ab.addEventListener("click", function () { confirmModal("Archive " + id, "Archive this project?", function () { PHG_API.update("projects", id, {status:"Archived"}).then(function(){toast(id+" archived.","success");navigate("projects");}).catch(function(e){toast("Failed: "+apiError(e),"error");}); }); });
+    });
+    var addBtn = el("btnAddProject");
+    if (addBtn) addBtn.addEventListener("click", function () {
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Add Project";
+      body.innerHTML = '<div class="form-group"><label>Code</label><input type="text" class="form-control" id="pCode"></div>' +
+        '<div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName"></div>' +
+        '<div class="form-group"><label>Customer</label><input type="text" class="form-control" id="pCustomer"></div>' +
+        '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option>Technical</option><option>Transport</option><option>Shared</option></select></div>' +
+        '<div class="form-group"><label>Manager</label><input type="text" class="form-control" id="pManager"></div>' +
+        '<div class="form-group"><label>Value</label><input type="number" class="form-control" id="pValue" step="0.01"></div>' +
+        '<div class="form-group"><label>Priority</label><select class="form-control" id="pPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
+        '<div class="form-group"><label>Status</label><select class="form-control" id="pStatus"><option selected>Approved</option><option>Lead</option><option>Quotation</option><option>In progress</option><option>Completed</option></select></div>' +
+        '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="pDue"></div>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Create";
+      el("modalOk").onclick = async function () {
+        var p = { code: el("pCode").value.trim(), name: el("pName").value.trim(), customer: el("pCustomer").value.trim(), division: el("pDivision").value, manager: el("pManager").value.trim(), value: parseFloat(el("pValue").value)||0, priority: el("pPriority").value, status: el("pStatus").value, due: el("pDue").value.trim()||null };
+        if (!p.code || !p.name) { toast("Code and Name required","error"); return; }
+        try { await PHG_API.create("projects", p); mb.style.display="none"; toast("Created.","success"); navigate("projects"); } catch(e){toast("Failed: "+apiError(e),"error");}
+      };
+      mb.style.display = "flex";
+    });
+  };
+
+
+  function openProjectEditModal(p) {
+    var mb = el("modalBackdrop"), body = el("modalBody");
+    var id = p.id || p.code;
+    el("modalTitle").textContent = "Edit Project " + id;
+    body.innerHTML = '<div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName" value="' + esc(p.name||"") + '"></div>' +
+      '<div class="form-group"><label>Customer</label><input type="text" class="form-control" id="pCustomer" value="' + esc(p.customer||"") + '"></div>' +
+      '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option' + (p.division==="Technical"?" selected":"") + '>Technical</option><option' + (p.division==="Transport"?" selected":"") + '>Transport</option><option' + (p.division==="Shared"?" selected":"") + '>Shared</option></select></div>' +
+      '<div class="form-group"><label>Manager</label><input type="text" class="form-control" id="pManager" value="' + esc(p.manager||"") + '"></div>' +
+      '<div class="form-group"><label>Value</label><input type="number" class="form-control" id="pValue" step="0.01" value="' + (p.value||0) + '"></div>' +
+      '<div class="form-group"><label>Priority</label><select class="form-control" id="pPriority"><option' + (p.priority==="Low"?" selected":"") + '>Low</option><option' + (p.priority==="Medium"?" selected":"") + '>Medium</option><option' + (p.priority==="High"?" selected":"") + '>High</option></select></div>' +
+      '<div class="form-group"><label>Status</label><select class="form-control" id="pStatus"><option' + (p.status==="Approved"?" selected":"") + '>Approved</option><option' + (p.status==="Lead"?" selected":"") + '>Lead</option><option' + (p.status==="In progress"?" selected":"") + '>In progress</option><option' + (p.status==="Completed"?" selected":"") + '>Completed</option><option' + (p.status==="Archived"?" selected":"") + '>Archived</option></select></div>' +
+      '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="pDue" value="' + (p.due||"") + '"></div>';
+    el("modalCancel").style.display = "inline-block";
+    el("modalOk").style.display = "inline-block";
+    el("modalOk").textContent = "Save";
+    el("modalOk").onclick = async function () {
+      var payload = { name: el("pName").value.trim(), customer: el("pCustomer").value.trim(), division: el("pDivision").value, manager: el("pManager").value.trim(), value: parseFloat(el("pValue").value)||0, priority: el("pPriority").value, status: el("pStatus").value, due: el("pDue").value.trim()||null };
+      try { await PHG_API.update("projects", id, payload); mb.style.display = "none"; toast(id + " updated.", "success"); navigate("projects"); } catch (e) { toast("Update failed: " + apiError(e), "error"); }
+    };
+    mb.style.display = "flex";
+  }
+
+
+  /* ---------- Tasks CRUD ---------- */
+  VIEWS.tasks = function () {
+    var canEdit = session.role === "admin" || session.role === "gm" || session.role === "transport";
+    var html = pageHead("Tasks", "Task register.", canEdit ? '<button class="btn btn-primary" id="btnAddTask">+ Add Task</button>' : "");
+    var rows = "";
+    (D.tasks || []).forEach(function (t) {
+      var id = t.id || t.code;
+      var proj = (D.projects || []).filter(function (p) { return (p.id || p.code) === t.project; })[0];
+      rows += "<tr><td><strong>" + id + "</strong></td><td>" + (proj ? (proj.id||proj.code) : (t.project||"-")) + "</td><td>" + (t.title || "-") + "</td><td>" + (t.assignee || "-") + "</td><td>" + (t.priority || "-") + "</td><td>" + (t.status || "-") + "</td><td>" + (t.due || "-") + "</td>" +
+        "<td>" + (canEdit ? '<button class="tv-' + id + '">View</button> <button class="te-' + id + '">Edit</button> <button class="td-' + id + '">Delete</button>' : "View-only") + "</td></tr>";
+    });
+    html += panel("Task register", (D.tasks || []).length + " tasks", '<div class="table-scroll"><table class="pt"><thead><tr><th>Task</th><th>Project</th><th>Title</th><th>Assignee</th><th>Priority</th><th>Status</th><th>Due</th><th>Actions</th></tr></thead><tbody>' + rows + "</tbody></table></div>", "", true);
+    content().innerHTML = html;
+    (D.tasks || []).forEach(function (t) {
+      var id = t.id || t.code;
+      var vb = el("tv-" + id), eb = el("te-" + id), db = el("td-" + id);
+      if (vb) vb.addEventListener("click", function () { alert("Task " + id + "\\nTitle: " + (t.title||"N/A") + "\\nProject: " + (t.project||"N/A") + "\\nStatus: " + (t.status||"N/A")); });
+      if (eb) eb.addEventListener("click", function () { openTaskEditModal(t); });
+      if (db) db.addEventListener("click", function () { confirmModal("Delete " + id, "Delete this task?", function () { PHG_API.del("tasks", id).then(function(){toast(id+" deleted.","success");navigate("tasks");}).catch(function(e){toast("Failed: "+apiError(e),"error");}); }); });
+    });
+    var addBtn = el("btnAddTask");
+    if (addBtn) addBtn.addEventListener("click", function () {
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Add Task";
+      var projOpts = (D.projects || []).map(function (p) { var pid = p.id || p.code; return '<option value="' + pid + '">' + pid + " - " + (p.name||"") + "</option>"; }).join("");
+      body.innerHTML = '<div class="form-group"><label>Code</label><input type="text" class="form-control" id="tCode"></div>' +
+        '<div class="form-group"><label>Project</label><select class="form-control" id="tProject"><option value="">Select project</option>' + projOpts + '</select></div>' +
+        '<div class="form-group"><label>Title</label><input type="text" class="form-control" id="tTitle"></div>' +
+        '<div class="form-group"><label>Assignee</label><input type="text" class="form-control" id="tAssignee"></div>' +
+        '<div class="form-group"><label>Priority</label><select class="form-control" id="tPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
+        '<div class="form-group"><label>Status</label><select class="form-control" id="tStatus"><option selected>To do</option><option>In progress</option><option>Done</option><option>Blocked</option></select></div>' +
+        '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="tDue"></div>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Create";
+      el("modalOk").onclick = async function () {
+        var t = { code: el("tCode").value.trim(), project: el("tProject").value.trim(), title: el("tTitle").value.trim(), assignee: el("tAssignee").value.trim(), priority: el("tPriority").value, status: el("tStatus").value, due: el("tDue").value.trim()||null };
+        if (!t.code) { toast("Code required","error"); return; }
+        if (!t.project) { toast("Project required","error"); return; }
+        if (!t.title) { toast("Title required","error"); return; }
+        try { await PHG_API.create("tasks", t); mb.style.display="none"; toast("Created.","success"); navigate("tasks"); } catch(e){toast("Failed: "+apiError(e),"error");}
+      };
+      mb.style.display = "flex";
+    });
+  };
+
+
+  function openTaskEditModal(t) {
+    var mb = el("modalBackdrop"), body = el("modalBody");
+    var id = t.id || t.code;
+    el("modalTitle").textContent = "Edit Task " + id;
+    var projOpts = (D.projects || []).map(function (p) { var pid = p.id || p.code; return '<option value="' + pid + '"' + (pid === t.project ? " selected" : "") + '>' + pid + " - " + (p.name||"") + "</option>"; }).join("");
+    body.innerHTML = '<div class="form-group"><label>Project</label><select class="form-control" id="tProject"><option value="">Select project</option>' + projOpts + '</select></div>' +
+      '<div class="form-group"><label>Title</label><input type="text" class="form-control" id="tTitle" value="' + esc(t.title||"") + '"></div>' +
+      '<div class="form-group"><label>Assignee</label><input type="text" class="form-control" id="tAssignee" value="' + esc(t.assignee||"") + '"></div>' +
+      '<div class="form-group"><label>Priority</label><select class="form-control" id="tPriority"><option' + (t.priority==="Low"?" selected":"") + '>Low</option><option' + (t.priority==="Medium"?" selected":"") + '>Medium</option><option' + (t.priority==="High"?" selected":"") + '>High</option></select></div>' +
+      '<div class="form-group"><label>Status</label><select class="form-control" id="tStatus"><option' + (t.status==="To do"?" selected":"") + '>To do</option><option' + (t.status==="In progress"?" selected":"") + '>In progress</option><option' + (t.status==="Done"?" selected":"") + '>Done</option><option' + (t.status==="Blocked"?" selected":"") + '>Blocked</option></select></div>' +
+      '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="tDue" value="' + (t.due||"") + '"></div>';
+    el("modalCancel").style.display = "inline-block";
+    el("modalOk").style.display = "inline-block";
+    el("modalOk").textContent = "Save";
+    el("modalOk").onclick = async function () {
+      var payload = { project: el("tProject").value.trim(), title: el("tTitle").value.trim(), assignee: el("tAssignee").value.trim(), priority: el("tPriority").value, status: el("tStatus").value, due: el("tDue").value.trim()||null };
+      try { await PHG_API.update("tasks", id, payload); mb.style.display = "none"; toast(id + " updated.", "success"); navigate("tasks"); } catch (e) { toast("Update failed: " + apiError(e), "error"); }
+    };
+    mb.style.display = "flex";
+  }
+
+
 })();
