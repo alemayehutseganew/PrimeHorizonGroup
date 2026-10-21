@@ -238,10 +238,6 @@
     return apiRequest("/tasks/" + encodeURIComponent(id) + "/reject",
       { method: "POST", body: JSON.stringify({ note: note || "" }) });
   }
-}
-    return apiRequest("/contributions/" + encodeURIComponent(code) + "/reject/",
-      { method: "POST", body: JSON.stringify({ note: note || "" }) });
-  }
 
   function postInquiry(payload) {
     return apiRequest("/inquiries/", { method: "POST", body: JSON.stringify(payload) });
@@ -474,21 +470,7 @@
     baseUrl: "/api/index?__phg_path=", getToken: function () { return null; }
   };
 
-  // Safely assign PHG_API: use the real definition if it was successfully created,
-  // otherwise fall back to the safe fallback above.
-  try {
-    // Verify the real definition has the expected structure before using it.
-    var hasRequiredMethods = window.PHG_API && typeof window.PHG_API === "object"
-      && typeof window.PHG_API.login === "function"
-      && typeof window.PHG_API.logout === "function";
-    if (hasRequiredMethods) {
-      // Real definition is good — keep it.
-    } else {
-      window.PHG_API = phgApiFallback;
-    }
-  } catch (e) {
-    window.PHG_API = phgApiFallback;
-  }
+  
 
   // Also expose a handy reference for portal.js initialization checks.
   window.PHG_API = {
