@@ -1,6 +1,29 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
   "buildCommand": "bash vercel-build.sh",
+  "rewrites": [
+    {
+      "source": "/admin",
+      "destination": "/api/index?__phg_path=/admin/"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/api/index?__phg_path=/admin/:path*"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/index?__phg_path=/api/"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?__phg_path=/api/:path*"
+    },
+    {
+      "source": "/static/admin/:path*",
+      "destination": "/staticfiles/admin/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/static/css/(.*)",
