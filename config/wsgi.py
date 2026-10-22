@@ -1,5 +1,5 @@
 """
-WSGI entrypoint (used by gunicorn locally and by Vercel's api/index.py).
+WSGI entrypoint (used by gunicorn locally and by Vercel's Django runtime).
 
 Adds ackend/ to sys.path so Django's config and core packages are importable.
 """

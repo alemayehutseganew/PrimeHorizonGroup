@@ -157,3 +157,8 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+admin.site.site_header = "Prime Horizon Group Plc Administration"
+admin.site.site_title = "Prime Horizon Group Plc Administration"
+admin.site.index_title = "Prime Horizon Group Plc Management"

@@ -2,9 +2,10 @@
 
 Vercel's Node.js function runtime + @neondatabase/serverless exposes a
 raw PG pool suitable for a small serverless function. Django runs as the
-Python WSGI app (api/index.py), so this module exists so you can reach
-the Neon DB from Node code (edge calls, cron, third-party webhooks) with
-the same pooled connection string your Vercel project already has:
+Python WSGI app (via Vercel's official Django architecture), so this
+module exists so you can reach the Neon DB from Node code (edge calls,
+cron, third-party webhooks) with the same pooled connection string your
+Vercel project already has:
 POSTGRES_URL_NON_POOLING / DATABASE_URL
 """
 import os

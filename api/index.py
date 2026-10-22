@@ -1,20 +1,12 @@
 """Vercel serverless entrypoint for the Django API.
 
-Routing facts established by live testing on this deployment:
-  * a per-file function in api/ is addressable at /api/index (rewrite
-    destination) and natively at /api (exact);
-  * a rewrite does NOT hand the original request path to the function,
-    so /api/<rest> is forwarded as ?__phg_path=/<rest> and restored
-    as PATH_INFO here before Django resolves the URL.
-
-Both ``application`` (WSGI convention) and ``app`` (Vercel convention)
-are exposed for compatibility.
+With Vercel's official Django architecture, routing is handled automatically:
+Vercel detects manage.py and uses the WSGI_APPLICATION setting. This file
+is kept as a fallback entrypoint for backward compatibility only.
 """
 import os
-import re
 import sys
 from pathlib import Path
-from urllib.parse import unquote
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 # Repository root: `config` / `core` packages live here.
@@ -24,28 +16,5 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 from django.core.wsgi import get_wsgi_application
 
-_django_app = get_wsgi_application()
-_PHG_PATH = re.compile(r"(?:^|&)(?:__phg_path|phg_route)=([^&]*)")
-
-
-def application(environ, start_response):
-    qs = environ.get("QUERY_STRING", "")
-    match = _PHG_PATH.search(qs)
-    if match:
-        restored = unquote(match.group(1))
-        if restored and restored != "/":
-            # Every API URL pattern in core/urls.py ends with a slash.
-            if not restored.endswith("/"):
-                restored += "/"
-            environ["PATH_INFO"] = restored
-        elif restored == "/":
-            environ["PATH_INFO"] = "/"
-        # FIX: strip __phg_path from QUERY_STRING so Django filters/
-        # pagination see only real params (page, search, etc.).
-        # Preserve any additional query params (e.g. &page=2).
-        remaining = [p for p in qs.split("&") if not p.startswith("__phg_path=") and not p.startswith("phg_route=")]
-        environ["QUERY_STRING"] = "&".join(remaining)
-    return _django_app(environ, start_response)
-
-
+application = get_wsgi_application()
 app = application
