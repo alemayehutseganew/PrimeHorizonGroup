@@ -22,7 +22,7 @@
   function navLinks() {
     return NAV.map(function (n) {
       return '<a href="' + n[0] + '" data-i18n="' + n[3] + '"' + (n[2] === page ? ' class="active"' : '') + '>' + n[1] + '</a>';
-    }).join("");
+    }).join("") + '<a class="nav-cta-mobile" href="/contact" data-i18n="hero.cta2">Get a Quote</a>';
   }
 
   var topbarEl = document.querySelector("[data-site-topbar]");
@@ -53,7 +53,7 @@
         '</a>' +
         '<nav class="nav" id="mainNav" aria-label="Main navigation">' + navLinks() + '</nav>' +
         '<div class="header-cta">' +
-          '<button type="button" class="btn btn-outline btn-sm lang-toggle" id="langToggle" aria-label="Switch language">EN</button>' +
+          '<button type="button" class="btn btn-outline btn-sm lang-toggle" id="langToggle" aria-label="Switch language"><span class="lang-opt" data-lang="en">EN</span><span class="lang-sep">|</span><span class="lang-opt" data-lang="am">አማ</span></button>' +
           '<a href="/portal" class="btn btn-outline btn-sm" data-i18n="nav.login">Client Login</a>' +
           '<a href="/contact" class="btn btn-primary btn-sm" data-i18n="hero.cta2">Get a Quote</a>' +
           '<button class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="mainNav">' +
@@ -67,7 +67,9 @@
     var btn = document.getElementById("langToggle");
     if(!btn) return;
     var cur = (window.PHG_I18N && window.PHG_I18N.getLang) ? window.PHG_I18N.getLang() : "en";
-    btn.textContent = (cur === "en") ? "አማ" : "EN";
+    btn.querySelectorAll(".lang-opt").forEach(function(span){
+      span.classList.toggle("active", span.getAttribute("data-lang") === cur);
+    });
   }
   var langBtn = document.getElementById("langToggle");
   if(langBtn){
