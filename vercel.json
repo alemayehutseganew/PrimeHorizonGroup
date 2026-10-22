@@ -26,14 +26,6 @@
       "destination": "/api/index?__phg_path=/:path*"
     },
     {
-      "source": "/admin/:path*",
-      "destination": "/api/index?__phg_path=/admin/:path*"
-    },
-    {
-      "source": "/admin",
-      "destination": "/api/index?__phg_path=/admin/"
-    },
-    {
       "source": "/static/admin/:path*",
       "destination": "/api/index?__phg_path=/static/admin/:path*"
     },
