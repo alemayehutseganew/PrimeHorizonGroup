@@ -469,6 +469,31 @@
   }
   /* ---------- View helpers ---------- */
   function content() { return el("portalContent"); }
+  /* ---------- Modal lifecycle helpers (single source of truth) ---------- */
+  function openModal(mb) {
+    mb = mb || el("modalBackdrop");
+    if (!mb) return;
+    mb.classList.add("open");
+    mb.style.display = "flex";
+  }
+  function closeModal() {
+    var mb = el("modalBackdrop");
+    if (mb) { mb.classList.remove("open"); mb.style.display = "none"; }
+    var ok = el("modalOk");
+    if (ok) ok.onclick = null;
+    var cancel = el("modalCancel");
+    if (cancel) cancel.onclick = null;
+    /* Clean up temporary global form handlers to prevent leaks and stale actions */
+    Object.keys(window).forEach(function (k) {
+      if (k.indexOf("__phgFormHandler_") === 0) {
+        delete window[k];
+      }
+    });
+    /* Re-enable any submit buttons that may have been disabled during a failed save */
+    document.querySelectorAll("button[type=submit], input[type=submit]").forEach(function (b) {
+      b.disabled = false;
+    });
+  }
   function pageHead(title, sub, actionsHtml) {
     return '<div class="page-head"><div><h1>' + title + '</h1><p>' + sub + '</p></div>' +
       (actionsHtml ? '<div style="display:flex; gap:10px; flex-wrap:wrap">' + actionsHtml + "</div>" : "") + "</div>";
@@ -806,16 +831,21 @@
         '</div>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Reference</span><input name="reference" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Method</span><input name="method" value="Bank transfer" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
-        '</form>';
+        '</form>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Record Contribution";
-      el("modalOk").onclick = null;
-      el("modalOk").onclick = async function () {
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitCt = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Recording...";
         var fd = new FormData(el("addCtForm"));
         var shCode = fd.get("shareholder_code");
         var sh = D.shareholders.filter(function (s) { return s.id === shCode; })[0];
-        if (!sh) { toast("Unknown shareholder code: " + shCode, "error"); return; }
+        if (!sh) { toast("Unknown shareholder code: " + shCode, "error"); btn.disabled = false; btn.textContent = "Record Contribution"; return; }
         var payload = {
           shareholder_code: shCode,
           amount: parseFloat(fd.get("amount")) || 0,
@@ -827,14 +857,19 @@
         };
         try {
           var created = await PHG_API.create("contributions", payload);
-          mb.style.display = "none";
+          closeModal();
           toast("Contribution " + (created.id || created.sh) + " recorded (pending approval).", "success");
           navigate("contributions");
         } catch (e) {
+          btn.disabled = false;
+          btn.textContent = "Record Contribution";
           toast("Create failed: " + apiError(e), "error");
         }
       };
-      mb.style.display = "flex";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitCt;
+      window.__phgFormHandler_addCtForm = submitCt;
+      openModal(mb);
     });
   };
   /* ---------- Vehicles ---------- */
@@ -852,21 +887,29 @@
     html += "</div>";
 
     var rows = "";
+    var canEditVeh = session.role === "transport" || session.role === "gm" || session.role === "admin";
     D.vehicles.forEach(function (v) {
       var insSoon = new Date(v.insurance) - new Date("2026-02-18") < 1000 * 60 * 60 * 24 * 120;
       rows += "<tr><td><strong>" + v.id + "</strong></td><td>" + v.plate + "</td><td>" + v.make + " " + v.model + "</td>" +
         "<td>" + v.year + "</td><td>" + v.category + "</td><td>" + v.driver + "</td>" +
         '<td class="num">' + v.odometer.toLocaleString() + " km</td>" +
         "<td>" + v.insurance + (insSoon ? ' <span class="badge amber">Expiring</span>' : "") + "</td>" +
-        "<td>" + badgeFor(v.status) + "</td></tr>";
+        "<td>" + badgeFor(v.status) + "</td>" +
+        "<td>" + (canEditVeh ? '<button class="btn btn-xs btn-outline" data-veh-edit="' + v.code + '">Edit</button> <button class="btn btn-xs btn-danger" data-veh-del="' + v.code + '">Deactivate</button>' : "") + "</td></tr>";
     });
 
     html += panel("Fleet register", "Overlapping bookings for the same vehicle are blocked where dates conflict.",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
-      "<th>ID</th><th>Plate</th><th>Make / Model</th><th>Year</th><th>Category</th><th>Driver</th><th class='num'>Odometer</th><th>Insurance until</th><th>Status</th>" +
+      "<th>ID</th><th>Plate</th><th>Make / Model</th><th>Year</th><th>Category</th><th>Driver</th><th class='num'>Odometer</th><th>Insurance until</th><th>Status</th><th>Actions</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>", "", true);
 
     content().innerHTML = html;
+    (D.vehicles || []).forEach(function (v) {
+      var eb = document.querySelector('[data-veh-edit="' + v.code + '"]');
+      var db = document.querySelector('[data-veh-del="' + v.code + '"]');
+      if (eb) eb.addEventListener("click", function () { openVehEditModal(v); });
+      if (db) db.addEventListener("click", function () { confirmModal("Deactivate Vehicle " + v.code, "Deactivate \"" + v.plate + "\"? This marks the vehicle as inactive and it will no longer appear as available for trips.", function () { PHG_API.update("vehicles", v.code, { status: "Inactive" }).then(function(){toast(v.code + " deactivated.","success");navigate("vehicles");}).catch(function(e){toast("Deactivate failed: "+apiError(e),"error");}); }); });
+    });
     var b = el("btnAddVeh");
     if (b) b.addEventListener("click", function () {
       var mb = el("modalBackdrop"), body = el("modalBody");
@@ -889,12 +932,18 @@
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Insurance until</span><input name="insurance_until" type="date" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Purchase cost (ETB)</span><input name="purchase_cost" type="number" min="0" step="any" value="0" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '</div>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
         '</form>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create Vehicle";
       el("modalOk").onclick = null;
-      el("modalOk").onclick = async function () {
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitVeh = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Creating...";
         var fd = new FormData(el("addVehForm"));
         var payload = {
           plate: fd.get("plate"),
@@ -910,16 +959,77 @@
         };
         try {
           var created = await PHG_API.postVehicle(payload);
-          mb.style.display = "none";
+          closeModal();
           toast("Vehicle " + (created.id || created.plate) + " added.");
           refreshLiveData();
         } catch (e) {
+          btn.disabled = false;
+          btn.textContent = "Create Vehicle";
           toast("Create failed: " + apiError(e));
         }
       };
-      mb.style.display = "flex";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitVeh;
+      window.__phgFormHandler_addVehForm = submitVeh;
+      openModal(mb);
     });
   };
+
+  function openVehEditModal(v) {
+    var mb = el("modalBackdrop"), body = el("modalBody");
+    var code = v.code || v.id;
+    el("modalTitle").textContent = "Edit Vehicle " + code;
+    body.innerHTML = '<form id="editVehForm" style="display:grid;gap:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Plate</span><input name="plate" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(v.plate || "") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Make</span><input name="make" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(v.make || "") + '"></label>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Model</span><input name="model" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(v.model || "") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Year</span><input name="year" type="number" min="1900" max="2030" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + (v.year || "") + '"></label>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Category</span><input name="category" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(v.category || "Pickup") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Driver</span><input name="driver" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(v.driver || "") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Odometer (km)</span><input name="odometer" type="number" min="0" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + (v.odometer || 0) + '"></label>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Insurance until</span><input name="insurance_until" type="date" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + (v.insurance || "") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Purchase cost (ETB)</span><input name="purchase_cost" type="number" min="0" step="any" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + (v.purchase || 0) + '"></label>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Status</span><select name="status" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"><option value="Available"' + (v.status === "Available" ? " selected" : "") + '>Available</option><option value="Maintenance"' + (v.status === "Maintenance" ? " selected" : "") + '>Maintenance</option><option value="Inactive"' + (v.status === "Inactive" ? " selected" : "") + '>Inactive</option></select></label>' +
+      '</div>' +
+      '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+      '</form>';
+    el("modalCancel").style.display = "inline-block";
+    el("modalOk").style.display = "inline-block";
+    el("modalOk").textContent = "Save";
+    el("modalCancel").onclick = null;
+    el("modalCancel").onclick = closeModal;
+    var saveVeh = async function () {
+      var btn = el("modalOk");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+      var fd = new FormData(el("editVehForm"));
+      var payload = {
+        plate: fd.get("plate"),
+        make: fd.get("make"),
+        model: fd.get("model"),
+        year: parseInt(fd.get("year"), 10),
+        category: fd.get("category") || "Pickup",
+        driver: fd.get("driver") || "—",
+        odometer: parseInt(fd.get("odometer"), 10) || 0,
+        insurance: fd.get("insurance_until") || null,
+        purchase: parseFloat(fd.get("purchase_cost")) || 0,
+        status: fd.get("status") || "Available"
+      };
+      try { await PHG_API.update("vehicles", code, payload); closeModal(); toast(code + " updated.", "success"); navigate("vehicles"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
+    };
+    el("modalOk").onclick = null;
+    el("modalOk").onclick = saveVeh;
+    window.__phgFormHandler_editVehForm = saveVeh;
+    openModal(mb);
+  }
 
   /* ---------- Trips ---------- */
   VIEWS.trips = function () {
@@ -1189,12 +1299,17 @@
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Amount (ETB)</span><input name="amount" type="number" min="0.01" step="any" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Reference</span><input name="reference" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '</div>' +
-        '</form>';
+        '</form>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Record Transaction";
-      el("modalOk").onclick = null;
-      el("modalOk").onclick = async function () {
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitTx = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Recording...";
         var fd = new FormData(el("addTxForm"));
         var payload = {
           type: fd.get("kind"),
@@ -1207,14 +1322,19 @@
         };
         try {
           await PHG_API.create("transactions", payload);
-          mb.style.display = "none";
+          closeModal();
           toast("Transaction recorded (pending approval).", "success");
           navigate("finance");
         } catch (e) {
+          btn.disabled = false;
+          btn.textContent = "Record Transaction";
           toast("Create failed: " + apiError(e), "error");
         }
       };
-      mb.style.display = "flex";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitTx;
+      window.__phgFormHandler_addTxForm = submitTx;
+      openModal(mb);
     });
   };
   /* ---------- Invoices ---------- */
@@ -1246,12 +1366,14 @@
 
   /* ---------- Documents ---------- */
   VIEWS.documents = function () {
-    var html = pageHead("Documents", "Private, categorized storage with authorized downloads — never public URLs.");
+    var canEditDoc = session.role === "admin" || session.role === "gm" || session.role === "transport" || session.role === "projects";
+    var html = pageHead("Documents", "Private, categorized storage with authorized downloads — never public URLs.",
+      canEditDoc ? '<button class="btn btn-primary" id="btnAddDoc">+ Add Document</button>' : "");
     var rows = "";
     D.documents.forEach(function (d) {
       rows += "<tr><td><strong>" + d.id + "</strong></td><td>" + esc(d.name) + "</td><td>" + d.category + "</td><td>" + d.linked + "</td>" +
         "<td>" + d.uploaded + "</td><td>" + d.by + "</td><td><span class='badge gray'>" + d.access + "</span></td>" +
-        '<td><button class="btn btn-outline btn-xs" data-doc="' + d.id + '">Download</button></td></tr>';
+        '<td>' + (canEditDoc ? '<button class="btn btn-xs btn-outline" data-doc-edit="' + d.id + '">Edit</button> <button class="btn btn-xs btn-danger" data-doc-del="' + d.id + '">Delete</button>' : '<button class="btn btn-outline btn-xs" data-doc="' + d.id + '">Download</button>') + '</td></tr>';
     });
     html += panel("Document vault", "File type and size are validated; malware scanning is applied where feasible.",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
@@ -1259,14 +1381,107 @@
       "</tr></thead><tbody>" + rows + "</tbody></table></div>", "", true);
 
     content().innerHTML = html;
-    content().querySelectorAll("[data-doc]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        // §8: the Document API is metadata-only (no file binary backend),
-        // so never claim a download. Mark the limitation honestly.
-        toast("Document metadata only — file download is unavailable until file storage is configured.", "error");
-      });
+    (D.documents || []).forEach(function (d) {
+      if (canEditDoc) {
+        var eb = document.querySelector('[data-doc-edit="' + d.id + '"]');
+        var db = document.querySelector('[data-doc-del="' + d.id + '"]');
+        if (eb) eb.addEventListener("click", function () { openDocEditModal(d); });
+        if (db) db.addEventListener("click", function () { confirmModal("Delete Document " + d.id, "Delete \"" + d.name + "\"? This cannot be undone.", function () { PHG_API.del("documents", d.id).then(function(){toast(d.id + " deleted.","success");navigate("documents");}).catch(function(e){toast("Delete failed: "+apiError(e),"error");}); }); });
+      } else {
+        content().querySelectorAll('[data-doc="' + d.id + '"]').forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            toast("Document metadata only — file download is unavailable until file storage is configured.", "error");
+          });
+        });
+      }
+    });
+
+    var addBtn = el("btnAddDoc");
+    if (addBtn) addBtn.addEventListener("click", function () {
+      var mb = el("modalBackdrop"), body = el("modalBody");
+      el("modalTitle").textContent = "Add Document";
+      body.innerHTML = '<form id="addDocForm" style="display:grid;gap:10px">' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Name</span><input name="name" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Category</span><input name="category" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Linked to</span><input name="linked_to" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
+        '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Access level</span><select name="access_level" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"><option value="Private">Private</option><option value="Internal">Internal</option><option value="Public">Public</option></select></label>' +
+        '</div>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+        '</form>';
+      el("modalCancel").style.display = "inline-block";
+      el("modalOk").style.display = "inline-block";
+      el("modalOk").textContent = "Create";
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitDoc = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Creating...";
+        var fd = new FormData(el("addDocForm"));
+        var payload = {
+          name: fd.get("name"),
+          category: fd.get("category"),
+          linked_to: fd.get("linked_to") || "",
+          access_level: fd.get("access_level") || "Private"
+        };
+        try {
+          await PHG_API.create("documents", payload);
+          closeModal();
+          toast("Document \"" + payload.name + "\" added.");
+          refreshLiveData();
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = "Create";
+          toast("Create failed: " + apiError(e), "error");
+        }
+      };
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitDoc;
+      window.__phgFormHandler_addDocForm = submitDoc;
+      openModal(mb);
     });
   };
+  function openDocEditModal(d) {
+    var mb = el("modalBackdrop"), body = el("modalBody");
+    var code = d.id || d.code;
+    el("modalTitle").textContent = "Edit Document " + code;
+    body.innerHTML = '<form id="editDocForm" style="display:grid;gap:10px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Name</span><input name="name" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(d.name || "") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Category</span><input name="category" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(d.category || "") + '"></label>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Linked to</span><input name="linked_to" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px" value="' + esc(d.linked || "") + '"></label>' +
+      '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Access level</span><select name="access_level" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"><option value="Private"' + (d.access === "Private" ? " selected" : "") + '>Private</option><option value="Internal"' + (d.access === "Internal" ? " selected" : "") + '>Internal</option><option value="Public"' + (d.access === "Public" ? " selected" : "") + '>Public</option></select></label>' +
+      '</div>' +
+      '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+      '</form>';
+    el("modalCancel").style.display = "inline-block";
+    el("modalOk").style.display = "inline-block";
+    el("modalOk").textContent = "Save";
+    el("modalCancel").onclick = null;
+    el("modalCancel").onclick = closeModal;
+    var saveDoc = async function () {
+      var btn = el("modalOk");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+      var fd = new FormData(el("editDocForm"));
+      var payload = {
+        name: fd.get("name"),
+        category: fd.get("category"),
+        linked_to: fd.get("linked_to") || "",
+        access_level: fd.get("access_level") || "Private"
+      };
+      try { await PHG_API.update("documents", code, payload); closeModal(); toast(code + " updated.", "success"); navigate("documents"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
+    };
+    el("modalOk").onclick = null;
+    el("modalOk").onclick = saveDoc;
+    window.__phgFormHandler_editDocForm = saveDoc;
+    openModal(mb);
+  }
+
   /* ---------- Meetings ---------- */
   VIEWS.meetings = function () {
     var canManage = session.role === "gm" || session.role === "admin";
@@ -1486,15 +1701,21 @@
     var backdrop = el("modalBackdrop");
     el("modalTitle").textContent = title;
     el("modalBody").innerHTML = "<p>" + esc(message) + "</p>";
-    backdrop.classList.add("open");
-    var okBtn = el("modalOk");
-    var cancelBtn = el("modalCancel");
+    el("modalCancel").style.display = "inline-block";
+    el("modalOk").style.display = "inline-block";
+    el("modalOk").textContent = "Confirm";
+    el("modalOk").onclick = null;
+    el("modalCancel").onclick = null;
+    el("modalCancel").onclick = closeModal;
+    openModal(backdrop);
     function cleanup() {
-      backdrop.classList.remove("open");
+      closeModal();
       okBtn.removeEventListener("click", ok);
       cancelBtn.removeEventListener("click", cleanup);
     }
     function ok() { cleanup(); onConfirm(); }
+    var okBtn = el("modalOk");
+    var cancelBtn = el("modalCancel");
     okBtn.addEventListener("click", ok);
     cancelBtn.addEventListener("click", cleanup);
   }
@@ -1566,12 +1787,33 @@
       if (session) navigate("notifications");
     });
 
-    el("modalClose").addEventListener("click", function () {
-      el("modalBackdrop").classList.remove("open");
-    });
+    el("modalClose").addEventListener("click", closeModal);
     el("modalBackdrop").addEventListener("click", function (e) {
-      if (e.target === el("modalBackdrop")) el("modalBackdrop").classList.remove("open");
+      if (e.target === el("modalBackdrop")) closeModal();
     });
+    /* Global: Escape closes any open modal */
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        var mb = el("modalBackdrop");
+        if (mb && mb.classList.contains("open")) closeModal();
+      }
+    });
+    /* Global: delegate form submits so modal/CRUD forms never trigger a page reload */
+    document.addEventListener("submit", function (e) {
+      var form = e.target.closest("form");
+      if (!form) return;
+      e.preventDefault();
+      var btn = form.querySelector("button[type=submit], input[type=submit]");
+      if (btn && typeof btn.onclick === "function") {
+        btn.onclick(e);
+      } else {
+        var formId = form.id;
+        if (formId) {
+          var handler = window["__phgFormHandler_" + formId];
+          if (typeof handler === "function") handler(e);
+        }
+      }
+    }, true);
 
     function startPoll() {
       if (PHG_API.getMode() !== "live") return;
@@ -1607,22 +1849,32 @@
     if (ab) ab.addEventListener("click", function () {
       var mb = el("modalBackdrop"), body = el("modalBody");
       el("modalTitle").textContent = "Add Maintenance Record";
-      body.innerHTML = '<div class="form-group"><label>Vehicle Plate</label><input type="text" class="form-control" id="mVehicle" placeholder="VH-001"></div>' +
+      body.innerHTML = '<form id="addMaintForm" style="display:grid;gap:10px"><div class="form-group"><label>Vehicle Plate</label><input type="text" class="form-control" id="mVehicle" placeholder="VH-001"></div>' +
         '<div class="form-group"><label>Service Date</label><input type="date" class="form-control" id="mDate"></div>' +
         '<div class="form-group"><label>Provider</label><input type="text" class="form-control" id="mProvider"></div>' +
         '<div class="form-group"><label>Work</label><input type="text" class="form-control" id="mWork"></div>' +
         '<div class="form-group"><label>Cost</label><input type="number" class="form-control" id="mCost" step="0.01"></div>' +
         '<div class="form-group"><label>Next Due</label><input type="date" class="form-control" id="mNext"></div>' +
-        '<div class="form-group"><label>Status</label><select class="form-control" id="mStatus"><option>Completed</option><option>In progress</option><option>Scheduled</option><option>Cancelled</option></select></div>';
+        '<div class="form-group"><label>Status</label><select class="form-control" id="mStatus"><option>Completed</option><option>In progress</option><option>Scheduled</option><option>Cancelled</option></select></div>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+        '</form>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalOk").onclick = async function () {
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitMaint = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Creating...";
         var p = { vehicle: el("mVehicle").value.trim(), date: el("mDate").value.trim()||null, provider: el("mProvider").value.trim(), work: el("mWork").value.trim(), cost: parseFloat(el("mCost").value)||0, next: el("mNext").value.trim()||null, status: el("mStatus").value };
-        if (!p.vehicle) { toast("Vehicle required","error"); return; }
-        try { await PHG_API.create("maintenance", p); mb.style.display="none"; toast("Created.","success"); navigate("maintenance"); } catch(e){toast("Failed: "+apiError(e),"error");}
+        if (!p.vehicle) { toast("Vehicle required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
+        try { await PHG_API.create("maintenance", p); closeModal(); toast("Created.","success"); navigate("maintenance"); } catch(e){btn.disabled = false; btn.textContent = "Create"; toast("Failed: "+apiError(e),"error");}
       };
-      mb.style.display = "flex";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitMaint;
+      window.__phgFormHandler_addMaintForm = submitMaint;
+      openModal(mb);
     });
   };
 
@@ -1631,21 +1883,31 @@
     var mb = el("modalBackdrop"), body = el("modalBody");
     var id = m.id || m.code;
     el("modalTitle").textContent = "Edit Maintenance " + id;
-    body.innerHTML = '<div class="form-group"><label>Vehicle Plate</label><input type="text" class="form-control" id="mVehicle" value="' + esc(m.vehicle || "") + '"></div>' +
+    body.innerHTML = '<form id="editMaintForm" style="display:grid;gap:10px"><div class="form-group"><label>Vehicle Plate</label><input type="text" class="form-control" id="mVehicle" value="' + esc(m.vehicle || "") + '"></div>' +
       '<div class="form-group"><label>Service Date</label><input type="date" class="form-control" id="mDate" value="' + (m.date || "") + '"></div>' +
       '<div class="form-group"><label>Provider</label><input type="text" class="form-control" id="mProvider" value="' + esc(m.provider || "") + '"></div>' +
       '<div class="form-group"><label>Work</label><input type="text" class="form-control" id="mWork" value="' + esc(m.work || "") + '"></div>' +
       '<div class="form-group"><label>Cost</label><input type="number" class="form-control" id="mCost" step="0.01" value="' + (m.cost || 0) + '"></div>' +
       '<div class="form-group"><label>Next Due</label><input type="date" class="form-control" id="mNext" value="' + (m.next || "") + '"></div>' +
-      '<div class="form-group"><label>Status</label><select class="form-control" id="mStatus"><option' + (m.status === "Completed" ? " selected" : "") + '>Completed</option><option' + (m.status === "In progress" ? " selected" : "") + '>In progress</option><option' + (m.status === "Scheduled" ? " selected" : "") + '>Scheduled</option><option' + (m.status === "Cancelled" ? " selected" : "") + '>Cancelled</option></select></div>';
+      '<div class="form-group"><label>Status</label><select class="form-control" id="mStatus"><option' + (m.status === "Completed" ? " selected" : "") + '>Completed</option><option' + (m.status === "In progress" ? " selected" : "") + '>In progress</option><option' + (m.status === "Scheduled" ? " selected" : "") + '>Scheduled</option><option' + (m.status === "Cancelled" ? " selected" : "") + '>Cancelled</option></select></div>' +
+      '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+      '</form>';
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalOk").onclick = async function () {
+    el("modalCancel").onclick = null;
+    el("modalCancel").onclick = closeModal;
+    var saveMaint = async function () {
+      var btn = el("modalOk");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
       var p = { vehicle: el("mVehicle").value.trim(), date: el("mDate").value.trim() || null, provider: el("mProvider").value.trim(), work: el("mWork").value.trim(), cost: parseFloat(el("mCost").value) || 0, next: el("mNext").value.trim() || null, status: el("mStatus").value };
-      try { await PHG_API.update("maintenance", id, p); mb.style.display = "none"; toast(id + " updated.", "success"); navigate("maintenance"); } catch (e) { toast("Update failed: " + apiError(e), "error"); }
+      try { await PHG_API.update("maintenance", id, p); closeModal(); toast(id + " updated.", "success"); navigate("maintenance"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    mb.style.display = "flex";
+    el("modalOk").onclick = null;
+    el("modalOk").onclick = saveMaint;
+    window.__phgFormHandler_editMaintForm = saveMaint;
+    openModal(mb);
   }
 
 
@@ -1673,7 +1935,7 @@
     if (addBtn) addBtn.addEventListener("click", function () {
       var mb = el("modalBackdrop"), body = el("modalBody");
       el("modalTitle").textContent = "Add Project";
-      body.innerHTML = '<div class="form-group"><label>Code</label><input type="text" class="form-control" id="pCode"></div>' +
+      body.innerHTML = '<form id="addProjectForm" style="display:grid;gap:10px"><div class="form-group"><label>Code</label><input type="text" class="form-control" id="pCode"></div>' +
         '<div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName"></div>' +
         '<div class="form-group"><label>Customer</label><input type="text" class="form-control" id="pCustomer"></div>' +
         '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option>Technical</option><option>Transport</option><option>Shared</option></select></div>' +
@@ -1681,16 +1943,26 @@
         '<div class="form-group"><label>Value</label><input type="number" class="form-control" id="pValue" step="0.01"></div>' +
         '<div class="form-group"><label>Priority</label><select class="form-control" id="pPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
         '<div class="form-group"><label>Status</label><select class="form-control" id="pStatus"><option selected>Approved</option><option>Lead</option><option>Quotation</option><option>In progress</option><option>Completed</option></select></div>' +
-        '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="pDue"></div>';
+        '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="pDue"></div>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+        '</form>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalOk").onclick = async function () {
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitProject = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Creating...";
         var p = { code: el("pCode").value.trim(), name: el("pName").value.trim(), customer: el("pCustomer").value.trim(), division: el("pDivision").value, manager: el("pManager").value.trim(), value: parseFloat(el("pValue").value)||0, priority: el("pPriority").value, status: el("pStatus").value, due: el("pDue").value.trim()||null };
-        if (!p.code || !p.name) { toast("Code and Name required","error"); return; }
-        try { await PHG_API.create("projects", p); mb.style.display="none"; toast("Created.","success"); navigate("projects"); } catch(e){toast("Failed: "+apiError(e),"error");}
+        if (!p.code || !p.name) { toast("Code and Name required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
+        try { await PHG_API.create("projects", p); closeModal(); toast("Created.","success"); navigate("projects"); } catch(e){btn.disabled = false; btn.textContent = "Create"; toast("Failed: "+apiError(e),"error");}
       };
-      mb.style.display = "flex";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitProject;
+      window.__phgFormHandler_addProjectForm = submitProject;
+      openModal(mb);
     });
   };
 
@@ -1699,22 +1971,32 @@
     var mb = el("modalBackdrop"), body = el("modalBody");
     var id = p.id || p.code;
     el("modalTitle").textContent = "Edit Project " + id;
-    body.innerHTML = '<div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName" value="' + esc(p.name||"") + '"></div>' +
+    body.innerHTML = '<form id="editProjectForm" style="display:grid;gap:10px"><div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName" value="' + esc(p.name||"") + '"></div>' +
       '<div class="form-group"><label>Customer</label><input type="text" class="form-control" id="pCustomer" value="' + esc(p.customer||"") + '"></div>' +
       '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option' + (p.division==="Technical"?" selected":"") + '>Technical</option><option' + (p.division==="Transport"?" selected":"") + '>Transport</option><option' + (p.division==="Shared"?" selected":"") + '>Shared</option></select></div>' +
       '<div class="form-group"><label>Manager</label><input type="text" class="form-control" id="pManager" value="' + esc(p.manager||"") + '"></div>' +
       '<div class="form-group"><label>Value</label><input type="number" class="form-control" id="pValue" step="0.01" value="' + (p.value||0) + '"></div>' +
       '<div class="form-group"><label>Priority</label><select class="form-control" id="pPriority"><option' + (p.priority==="Low"?" selected":"") + '>Low</option><option' + (p.priority==="Medium"?" selected":"") + '>Medium</option><option' + (p.priority==="High"?" selected":"") + '>High</option></select></div>' +
       '<div class="form-group"><label>Status</label><select class="form-control" id="pStatus"><option' + (p.status==="Approved"?" selected":"") + '>Approved</option><option' + (p.status==="Lead"?" selected":"") + '>Lead</option><option' + (p.status==="In progress"?" selected":"") + '>In progress</option><option' + (p.status==="Completed"?" selected":"") + '>Completed</option><option' + (p.status==="Archived"?" selected":"") + '>Archived</option></select></div>' +
-      '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="pDue" value="' + (p.due||"") + '"></div>';
+      '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="pDue" value="' + (p.due||"") + '"></div>' +
+      '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+      '</form>';
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalOk").onclick = async function () {
+    el("modalCancel").onclick = null;
+    el("modalCancel").onclick = closeModal;
+    var saveProject = async function () {
+      var btn = el("modalOk");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
       var payload = { name: el("pName").value.trim(), customer: el("pCustomer").value.trim(), division: el("pDivision").value, manager: el("pManager").value.trim(), value: parseFloat(el("pValue").value)||0, priority: el("pPriority").value, status: el("pStatus").value, due: el("pDue").value.trim()||null };
-      try { await PHG_API.update("projects", id, payload); mb.style.display = "none"; toast(id + " updated.", "success"); navigate("projects"); } catch (e) { toast("Update failed: " + apiError(e), "error"); }
+      try { await PHG_API.update("projects", id, payload); closeModal(); toast(id + " updated.", "success"); navigate("projects"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    mb.style.display = "flex";
+    el("modalOk").onclick = null;
+    el("modalOk").onclick = saveProject;
+    window.__phgFormHandler_editProjectForm = saveProject;
+    openModal(mb);
   }
 
 
@@ -1743,24 +2025,34 @@
       var mb = el("modalBackdrop"), body = el("modalBody");
       el("modalTitle").textContent = "Add Task";
       var projOpts = (D.projects || []).map(function (p) { var pid = p.id || p.code; return '<option value="' + pid + '">' + pid + " - " + (p.name||"") + "</option>"; }).join("");
-      body.innerHTML = '<div class="form-group"><label>Code</label><input type="text" class="form-control" id="tCode"></div>' +
+      body.innerHTML = '<form id="addTaskForm" style="display:grid;gap:10px"><div class="form-group"><label>Code</label><input type="text" class="form-control" id="tCode"></div>' +
         '<div class="form-group"><label>Project</label><select class="form-control" id="tProject"><option value="">Select project</option>' + projOpts + '</select></div>' +
         '<div class="form-group"><label>Title</label><input type="text" class="form-control" id="tTitle"></div>' +
         '<div class="form-group"><label>Assignee</label><input type="text" class="form-control" id="tAssignee"></div>' +
         '<div class="form-group"><label>Priority</label><select class="form-control" id="tPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
         '<div class="form-group"><label>Status</label><select class="form-control" id="tStatus"><option selected>To do</option><option>In progress</option><option>Done</option><option>Blocked</option></select></div>' +
-        '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="tDue"></div>';
+        '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="tDue"></div>' +
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+        '</form>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalOk").onclick = async function () {
+      el("modalCancel").onclick = null;
+      el("modalCancel").onclick = closeModal;
+      var submitTask = async function () {
+        var btn = el("modalOk");
+        btn.disabled = true;
+        btn.textContent = "Creating...";
         var t = { code: el("tCode").value.trim(), project: el("tProject").value.trim(), title: el("tTitle").value.trim(), assignee: el("tAssignee").value.trim(), priority: el("tPriority").value, status: el("tStatus").value, due: el("tDue").value.trim()||null };
-        if (!t.code) { toast("Code required","error"); return; }
-        if (!t.project) { toast("Project required","error"); return; }
-        if (!t.title) { toast("Title required","error"); return; }
-        try { await PHG_API.create("tasks", t); mb.style.display="none"; toast("Created.","success"); navigate("tasks"); } catch(e){toast("Failed: "+apiError(e),"error");}
+        if (!t.code) { toast("Code required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
+        if (!t.project) { toast("Project required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
+        if (!t.title) { toast("Title required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
+        try { await PHG_API.create("tasks", t); closeModal(); toast("Created.","success"); navigate("tasks"); } catch(e){btn.disabled = false; btn.textContent = "Create"; toast("Failed: "+apiError(e),"error");}
       };
-      mb.style.display = "flex";
+      el("modalOk").onclick = null;
+      el("modalOk").onclick = submitTask;
+      window.__phgFormHandler_addTaskForm = submitTask;
+      openModal(mb);
     });
   };
 
@@ -1770,20 +2062,30 @@
     var id = t.id || t.code;
     el("modalTitle").textContent = "Edit Task " + id;
     var projOpts = (D.projects || []).map(function (p) { var pid = p.id || p.code; return '<option value="' + pid + '"' + (pid === t.project ? " selected" : "") + '>' + pid + " - " + (p.name||"") + "</option>"; }).join("");
-    body.innerHTML = '<div class="form-group"><label>Project</label><select class="form-control" id="tProject"><option value="">Select project</option>' + projOpts + '</select></div>' +
+    body.innerHTML = '<form id="editTaskForm" style="display:grid;gap:10px"><div class="form-group"><label>Project</label><select class="form-control" id="tProject"><option value="">Select project</option>' + projOpts + '</select></div>' +
       '<div class="form-group"><label>Title</label><input type="text" class="form-control" id="tTitle" value="' + esc(t.title||"") + '"></div>' +
       '<div class="form-group"><label>Assignee</label><input type="text" class="form-control" id="tAssignee" value="' + esc(t.assignee||"") + '"></div>' +
       '<div class="form-group"><label>Priority</label><select class="form-control" id="tPriority"><option' + (t.priority==="Low"?" selected":"") + '>Low</option><option' + (t.priority==="Medium"?" selected":"") + '>Medium</option><option' + (t.priority==="High"?" selected":"") + '>High</option></select></div>' +
       '<div class="form-group"><label>Status</label><select class="form-control" id="tStatus"><option' + (t.status==="To do"?" selected":"") + '>To do</option><option' + (t.status==="In progress"?" selected":"") + '>In progress</option><option' + (t.status==="Done"?" selected":"") + '>Done</option><option' + (t.status==="Blocked"?" selected":"") + '>Blocked</option></select></div>' +
-      '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="tDue" value="' + (t.due||"") + '"></div>';
+      '<div class="form-group"><label>Due Date</label><input type="date" class="form-control" id="tDue" value="' + (t.due||"") + '"></div>' +
+      '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+      '</form>';
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalOk").onclick = async function () {
+    el("modalCancel").onclick = null;
+    el("modalCancel").onclick = closeModal;
+    var saveTask = async function () {
+      var btn = el("modalOk");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
       var payload = { project: el("tProject").value.trim(), title: el("tTitle").value.trim(), assignee: el("tAssignee").value.trim(), priority: el("tPriority").value, status: el("tStatus").value, due: el("tDue").value.trim()||null };
-      try { await PHG_API.update("tasks", id, payload); mb.style.display = "none"; toast(id + " updated.", "success"); navigate("tasks"); } catch (e) { toast("Update failed: " + apiError(e), "error"); }
+      try { await PHG_API.update("tasks", id, payload); closeModal(); toast(id + " updated.", "success"); navigate("tasks"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    mb.style.display = "flex";
+    el("modalOk").onclick = null;
+    el("modalOk").onclick = saveTask;
+    window.__phgFormHandler_editTaskForm = saveTask;
+    openModal(mb);
   }
 
 
