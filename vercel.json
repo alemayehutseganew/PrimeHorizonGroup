@@ -28,6 +28,10 @@
   ],
   "rewrites": [
     {
+      "source": "/zzz",
+      "destination": "/about"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index?__phg_path=/:path*"
     },
