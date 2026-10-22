@@ -4,19 +4,11 @@
   "buildCommand": "bash vercel-build.sh",
   "rewrites": [
     {
-      "source": "^/admin$",
-      "destination": "/api/index?__phg_path=/admin/"
-    },
-    {
-      "source": "^/admin/(.*)$",
+      "source": "^/admin(?:/(.*))?$",
       "destination": "/api/index?__phg_path=/admin/$1"
     },
     {
-      "source": "^/api$",
-      "destination": "/api/index?__phg_path=/api/"
-    },
-    {
-      "source": "^/api/(.*)$",
+      "source": "^/api(?:/(.*))?$",
       "destination": "/api/index?__phg_path=/api/$1"
     },
     {
