@@ -25,7 +25,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 from django.core.wsgi import get_wsgi_application
 
 _django_app = get_wsgi_application()
-_PHG_PATH = re.compile(r"(?:^|&)(?:__phg_path|__phg_route)=([^&]*)" )
+_PHG_PATH = re.compile(r"(?:^|&)(?:__phg_path|phg_route)=([^&]*)")
 
 
 def application(environ, start_response):
@@ -43,7 +43,7 @@ def application(environ, start_response):
         # FIX: strip __phg_path from QUERY_STRING so Django filters/
         # pagination see only real params (page, search, etc.).
         # Preserve any additional query params (e.g. &page=2).
-        remaining = [p for p in qs.split("&") if not p.startswith("__phg_path=") and not p.startswith("__phg_route=")]
+        remaining = [p for p in qs.split("&") if not p.startswith("__phg_path=") and not p.startswith("phg_route=")]
         environ["QUERY_STRING"] = "&".join(remaining)
     return _django_app(environ, start_response)
 

@@ -23,7 +23,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 from django.core.wsgi import get_wsgi_application
 
 _django_app = get_wsgi_application()
-_PHG_PATH = re.compile(r"(?:^|&)(?:__phg_path|__phg_route)=([^&]*)" )
+_PHG_PATH = re.compile(r"(?:^|&)(?:__phg_path|phg_route)=([^&]*)")
 
 
 def application(environ, start_response):
