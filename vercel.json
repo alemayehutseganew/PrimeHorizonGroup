@@ -10,13 +10,19 @@
     {
       "source": "/static/css/(.*)",
       "headers": [
-        { "key": "Content-Type", "value": "text/css; charset=utf-8" }
+        {
+          "key": "Content-Type",
+          "value": "text/css; charset=utf-8"
+        }
       ]
     },
     {
       "source": "/static/js/(.*)",
       "headers": [
-        { "key": "Content-Type", "value": "application/javascript; charset=utf-8" }
+        {
+          "key": "Content-Type",
+          "value": "application/javascript; charset=utf-8"
+        }
       ]
     }
   ],
@@ -24,6 +30,22 @@
     {
       "source": "/api/:path*",
       "destination": "/api/index?__phg_path=/:path*"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/api/index?__phg_path=/admin/:path*"
+    },
+    {
+      "source": "/admin",
+      "destination": "/api/index?__phg_path=/admin/"
+    },
+    {
+      "source": "/admintest/:path*",
+      "destination": "/api/index?__phg_path=/admin/:path*"
+    },
+    {
+      "source": "/admintest",
+      "destination": "/api/index?__phg_path=/admin/"
     },
     {
       "source": "/static/admin/:path*",
