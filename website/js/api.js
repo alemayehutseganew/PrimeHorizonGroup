@@ -1,4 +1,4 @@
-/* Prime Horizon Group — API service layer */
+/* Prime Horizon Group â€” API service layer */
 (function () {
   "use strict";
 
@@ -114,7 +114,7 @@
       }
     } catch (err) {
       if (err && err.status !== undefined) throw err;
-      throw { status: 0, body: { detail: "Network unreachable — is the API running?" } };
+      throw { status: 0, body: { detail: "Network unreachable â€” is the API running?" } };
     }
   }
 
@@ -166,7 +166,7 @@
 
   async function requestPasswordReset(email) {
     // Backend always returns the same generic response whether or not the
-    // account exists — never surface account state to the caller.
+    // account exists â€” never surface account state to the caller.
     return apiRequest("/auth/password-reset/", {
       method: "POST", body: { email: email.toLowerCase() }
     });
@@ -291,7 +291,7 @@
     return {
       id: v.id, plate: v.plate, make: v.make, model: v.model,
       year: num(v.year), category: v.category, status: v.status,
-      driver: v.driver || "—", odometer: num(v.odometer),
+      driver: v.driver || "â€”", odometer: num(v.odometer),
       insurance: v.insurance || "", purchase: num(v.purchase)
     };
   }
@@ -304,7 +304,7 @@
   function adaptTrip(t) {
     return {
       id: t.id, customer: t.customer, vehicle: t.vehicle,
-      driver: t.driver || "—", route: t.route, start: t.start, end: t.end,
+      driver: t.driver || "â€”", route: t.route, start: t.start, end: t.end,
       price: num(t.price), fuel: num(t.fuel), status: t.status
     };
   }
@@ -418,7 +418,7 @@
         return { id: a.id, actor: a.actor, action: a.action, target: a.target, time: a.time, outcome: a.outcome };
       }),
       safeList("users", adaptUser),
-      // FIX §7.1: customers & leads were never hydrated — the CRM view
+      // FIX Â§7.1: customers & leads were never hydrated â€” the CRM view
       // rendered an empty pipeline even when the API had rows.
       safeList("customers", adaptCustomer),
       safeList("leads", adaptLead)
@@ -470,7 +470,7 @@
     baseUrl: "/api/index?__phg_path=", getToken: function () { return null; }
   };
 
-  
+
 
   // Also expose a handy reference for portal.js initialization checks.
   window.PHG_API = {
@@ -508,4 +508,3 @@ try {
 // Also expose a handy reference for portal.js initialization checks.
 window.PHG_API_INIT_ERROR = false;
 })();
-

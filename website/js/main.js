@@ -1,4 +1,4 @@
-/* Prime Horizon Group Plc — shared site behaviour */
+/* Prime Horizon Group Plc â€” shared site behaviour */
 (function () {
   "use strict";
 
@@ -13,16 +13,42 @@
   /* Mobile nav */
   var toggle = document.querySelector(".nav-toggle");
   var nav = document.querySelector(".nav");
+  var backdrop = null;
+  function openNav() {
+    if (!nav || !toggle) return;
+    nav.classList.add("open");
+    toggle.classList.add("open");
+    toggle.setAttribute("aria-expanded", "true");
+    document.body.classList.add("nav-open");
+    if (!backdrop) {
+      backdrop = document.createElement("div");
+      backdrop.className = "nav-backdrop";
+      document.body.appendChild(backdrop);
+      backdrop.addEventListener("click", closeNav);
+    }
+    backdrop.classList.add("open");
+  }
+  function closeNav() {
+    if (!nav || !toggle) return;
+    nav.classList.remove("open");
+    toggle.classList.remove("open");
+    toggle.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("nav-open");
+    if (backdrop) backdrop.classList.remove("open");
+  }
   if (toggle && nav) {
-    toggle.addEventListener("click", function () {
-      var open = nav.classList.toggle("open");
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (nav.classList.contains("open")) closeNav(); else openNav();
     });
     nav.addEventListener("click", function (e) {
-      if (e.target.tagName === "A") {
-        nav.classList.remove("open");
-        toggle.setAttribute("aria-expanded", "false");
-      }
+      if (e.target.tagName === "A") closeNav();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeNav();
+    });
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 860) closeNav();
     });
   }
 

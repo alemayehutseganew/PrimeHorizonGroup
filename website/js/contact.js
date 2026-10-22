@@ -1,4 +1,4 @@
-/* Contact page — client-side validation + local demo storage.
+/* Contact page â€” client-side validation + local demo storage.
    Note: this is a static demo. A production deployment must submit to the
    backend API (Django REST) which repeats all validation server-side. */
 (function () {
@@ -91,7 +91,7 @@
         var all = JSON.parse(localStorage.getItem(key) || "[]");
         all.push(record);
         localStorage.setItem(key, JSON.stringify(all));
-      } catch (_) { /* storage unavailable — still show success for demo */ }
+      } catch (_) { /* storage unavailable â€” still show success for demo */ }
     }
 
     setAlert("success",

@@ -2,6 +2,7 @@
    Prime Horizon Group Plc — Public Website
    Design: light theme · navy + blue/teal accents · clean spacing
    ============================================================ */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700&display=swap");
 
 :root {
   --navy-900: #0b1f3a;
@@ -449,7 +450,27 @@ table.data tbody tr:hover { background: #f8fafc; }
 .footer-bottom a { display: inline; padding: 0; }
 .footer-legal { display: flex; gap: 20px; }
 
-/* ---------- Reveal animation ---------- */
+/* ---------- Mobile nav backdrop ---------- */
+.nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 31, 58, 0.42);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 150;
+}
+.nav-backdrop.open { opacity: 1; pointer-events: auto; }
+body.nav-open { overflow: hidden; }
+
+/* ---------- Amharic typography ---------- */
+html[lang="am"] body { font-family: "Noto Sans Ethiopic", "Inter", "Segoe UI", system-ui, sans-serif; line-height: 1.8; }
+html[lang="am"] h1, html[lang="am"] h2, html[lang="am"] h3 { line-height: 1.45; }
+html[lang="am"] .btn { line-height: 1.4; min-height: 42px; }
+html[lang="am"] .nav a { line-height: 1.5; }
+html[lang="am"] input, html[lang="am"] textarea, html[lang="am"] select { line-height: 1.6; }
+html[lang="am"] .hero-badge { line-height: 1.5; }
+
 .reveal { opacity: 0; transform: translateY(26px); transition: opacity 0.6s ease, transform 0.6s ease; }
 .reveal.visible { opacity: 1; transform: none; }
 /* ---------- Responsive ---------- */
@@ -480,7 +501,7 @@ table.data tbody tr:hover { background: #f8fafc; }
   .nav.open { transform: none; }
   .nav a { padding: 13px 14px; }
   .nav-toggle { display: block; }
-  .header-cta .btn-outline { display: none; }
+  .header-cta .btn-outline:not(.lang-toggle) { display: none; }
   .topbar { display: none; }
   .grid-3, .grid-2, .split { grid-template-columns: 1fr; }
   .form-grid { grid-template-columns: 1fr; }
@@ -492,5 +513,5 @@ table.data tbody tr:hover { background: #f8fafc; }
   .footer-grid { grid-template-columns: 1fr; }
   .section { padding: 56px 0; }
   .hero { padding: 64px 0 90px; }
-  .header-cta .btn { display: none; }
+  .header-cta .btn:not(.lang-toggle) { display: none; }
 }

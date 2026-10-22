@@ -1,4 +1,4 @@
-/* Prime Horizon Group — portal data layer.
+/* Prime Horizon Group â€” portal data layer.
    Production: all records are loaded from the Django REST API against the
    persistent PostgreSQL database via PHG_API.hydrate(). This file provides
    only an empty initial structure so the portal never renders hard-coded

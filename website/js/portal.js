@@ -1,4 +1,4 @@
-/* Prime Horizon Group — Management Portal (demo SPA)
+/* Prime Horizon Group â€” Management Portal (demo SPA)
    Role-aware navigation, mock data, approval workflows and audit trail.
    NOTE: This is a front-end demonstration. In production, every permission
    check, calculation and approval must be enforced by the Django REST API. */
@@ -7,14 +7,14 @@
 
   var D = window.PHG_DATA;
 
-  /* ---------- Role → allowed views ---------- */
+  /* ---------- Role â†’ allowed views ---------- */
   var ROLE_VIEWS = {
-    gm:         ["dashboard","shareholders","contributions","leads","vehicles","drivers","trips","maintenance","projects","tasks","finance","invoices","documents","meetings","reports","notifications","audit","users","settings"],
+    gm:         ["dashboard","shareholders","contributions","leads","projects","tasks","finance","invoices","documents","meetings","reports","notifications","audit","users","settings"],
     finance:    ["dashboard","shareholders","contributions","leads","finance","invoices","documents","meetings","reports","notifications","audit","settings"],
-    transport:  ["dashboard","leads","vehicles","drivers","trips","maintenance","projects","tasks","finance","documents","reports","notifications","settings"],
     projects:   ["dashboard","leads","projects","tasks","finance","documents","reports","notifications","settings"],
-    admin:      ["dashboard","shareholders","contributions","vehicles","drivers","trips","maintenance","projects","tasks","documents","meetings","notifications","audit","users","settings"],
-    shareholder:["dashboard","shareholders","contributions","documents","meetings","reports","notifications","settings"]
+    admin:      ["dashboard","shareholders","contributions","projects","tasks","documents","meetings","notifications","audit","users","settings"],
+    shareholder:["dashboard","shareholders","contributions","documents","meetings","reports","notifications","settings"],
+    transport:  ["dashboard","leads","projects","tasks","finance","invoices","documents","reports","notifications","settings"]
   };
 
   var VIEW_META = {
@@ -67,8 +67,8 @@
   }
   function apiError(e) {
     if (!e) return "Unknown error";
-    if (e.status === 0) return "Network unreachable — is the API running?";
-    if (e.status === 401) return "Session expired — please sign in again.";
+    if (e.status === 0) return "Network unreachable â€” is the API running?";
+    if (e.status === 401) return "Session expired â€” please sign in again.";
     if (e.body && typeof e.body === "object") {
       if (e.body.detail) return e.body.detail;
       var bits = [];
@@ -80,8 +80,8 @@
     }
     return String(e.body || ("HTTP " + (e.status || "error")));
   }
-  // §7.2/§7.3 helper: generic modal create-form that POSTs real data.
-  // No demo fallback — validation errors stay on the form (§7.2).
+  // Â§7.2/Â§7.3 helper: generic modal create-form that POSTs real data.
+  // No demo fallback â€” validation errors stay on the form (Â§7.2).
   function openFormModal(title, fields, onSubmit, initial) {
     initial = initial || {};
     var ov = document.createElement("div");
@@ -123,14 +123,14 @@
     });
   }
   function refreshLiveData() {
-    // Re-fetch live rows then re-render current view (§7.2–7.4).
+    // Re-fetch live rows then re-render current view (Â§7.2â€“7.4).
     if (!window.PHG_API || !PHG_API.hydrate) { navigate(currentView); return; }
     PHG_API.hydrate().then(function () {
       if (window.PHG_DATA) D = window.PHG_DATA;
       syncNotifications();
       navigate(currentView);
     }).catch(function (err) {
-      toast("Refresh failed: " + apiError(err) + " — showing last loaded data.");
+      toast("Refresh failed: " + apiError(err) + " â€” showing last loaded data.");
       navigate(currentView);
     });
   }
@@ -155,7 +155,7 @@
   }
   /* ---------- Login ---------- */
   async function tryRestoreSession() {
-    // FIX §6.1/§9: restore token-auth session on reload so protected API
+    // FIX Â§6.1/Â§9: restore token-auth session on reload so protected API
     // calls succeed without forcing a fresh login every refresh.
     var token = null;
     try { token = window.PHG_API && PHG_API.getToken ? PHG_API.getToken() : null; } catch (e) {}
@@ -170,15 +170,15 @@
       var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || "";
       var role = String(mu.role || "").trim().toLowerCase();
       if (!role) {
-          // Invalidate session — no role means not authenticated
+          // Invalidate session â€” no role means not authenticated
           session = null;
           // Show authentication/authorization error and return to login
           return;
       }
       // Validate role against known application roles
-      // Unknown roles must fail closed — do not grant shareholder access
+      // Unknown roles must fail closed â€” do not grant shareholder access
       if (ROLE_VIEWS[role] === undefined) {
-          // Unknown role — fail closed
+          // Unknown role â€” fail closed
           session = null;
           return;
       }
@@ -212,6 +212,15 @@
         var me = await PHG_API.me();
         var mu = me.user || {};
         var nm = ((mu.first_name || "") + (mu.last_name ? " " + mu.last_name : "")).trim() || mu.email || email;
+        // Build the session exactly like tryRestoreSession() does. Without this
+        // the app rendered no sidebar and every view threw on session.role.
+        var role = String(mu.role || "").trim().toLowerCase();
+        if (!role || ROLE_VIEWS[role] === undefined) {
+          // Authenticated but not authorised for the portal - fail closed.
+          try { await PHG_API.logout(); } catch (_) {}
+          throw { status: 403, body: { detail: "Account has no portal role assigned." } };
+        }
+        session = { email: mu.email || email, name: nm, role: role, title: mu.title || mu.role_label || mu.role || "" };
         startApp();
         return;
       } catch (err2) {
@@ -221,7 +230,7 @@
         var isInitError = !window.PHG_API || typeof window.PHG_API !== "object"
           || (err2 && err2.message && err2.message.indexOf("PHG_API not initialized") !== -1);
         if (isInitError) {
-          // Portal services failed to initialize — do not expose internal JS errors as auth failures
+          // Portal services failed to initialize â€” do not expose internal JS errors as auth failures
           err.textContent = "Portal services failed to initialize. Please refresh the page.";
           console.error("PHG_API initialization failure, portal cannot start:", err2);
         } else {
@@ -318,7 +327,7 @@
         await PHG_API.confirmPasswordReset(token, p1, p2);
         showPanel("login");
         el("loginError").textContent =
-          "Password reset successful — sign in with your new password.";
+          "Password reset successful â€” sign in with your new password.";
         el("loginError").className = "alert success show";
       } catch (e2) {
         el("loginError").className = "alert error";
@@ -356,7 +365,7 @@
         await PHG_API.verifyEmail(token);
         showPanel("login");
         el("loginError").textContent =
-          "Account verified — you can sign in now.";
+          "Account verified â€” you can sign in now.";
         el("loginError").className = "alert success show";
       } catch (e2) {
         el("loginError").className = "alert error";
@@ -371,7 +380,7 @@
     D = window.PHG_DATA || D;
     syncNotifications();
     PHG_API.setMode("live");
-    var modeBadge = PHG_API.getMode() === "offline" ? ' <span style="font-size:0.72rem;color:#d97706">�? OFFLINE</span>' : '';
+    var modeBadge = PHG_API.getMode() === "offline" ? ' <span style="font-size:0.72rem;color:#d97706">ï¿½? OFFLINE</span>' : '';
     el("loginScreen").style.display = "none";
     el("portalShell").classList.add("active");
     el("topbarTitle").innerHTML = VIEW_META.dashboard.title + modeBadge;
@@ -459,7 +468,7 @@
     currentView = view;
     renderSidebar();
     el("topbarTitle").textContent = VIEW_META[view].title;
-    el("topbarSub").textContent = session.title + " · " + session.name;
+    el("topbarSub").textContent = session.title + " Â· " + session.name;
     el("portalContent").innerHTML = "";
     if (PHG_API.getMode() === "live") {
       try { await PHG_API.hydrate(); } catch (_) {}
@@ -473,26 +482,15 @@
   function openModal(mb) {
     mb = mb || el("modalBackdrop");
     if (!mb) return;
+    /* Reset the confirm button: a previous failed save may have left it disabled. */
+    var ok = el("modalOk");
+    if (ok) ok.disabled = false;
     mb.classList.add("open");
     mb.style.display = "flex";
   }
   function closeModal() {
     var mb = el("modalBackdrop");
     if (mb) { mb.classList.remove("open"); mb.style.display = "none"; }
-    var ok = el("modalOk");
-    if (ok) ok.onclick = null;
-    var cancel = el("modalCancel");
-    if (cancel) cancel.onclick = null;
-    /* Clean up temporary global form handlers to prevent leaks and stale actions */
-    Object.keys(window).forEach(function (k) {
-      if (k.indexOf("__phgFormHandler_") === 0) {
-        delete window[k];
-      }
-    });
-    /* Re-enable any submit buttons that may have been disabled during a failed save */
-    document.querySelectorAll("button[type=submit], input[type=submit]").forEach(function (b) {
-      b.disabled = false;
-    });
   }
   function pageHead(title, sub, actionsHtml) {
     return '<div class="page-head"><div><h1>' + title + '</h1><p>' + sub + '</p></div>' +
@@ -560,10 +558,11 @@
     var roleNote = {
       gm: "Full operational and financial visibility across both divisions.",
       finance: "You see governance, finance and reporting modules. Fleet and project records are read-only summaries.",
-      transport: "You manage fleet operations. Financial totals shown are operational figures only.",
+
       projects: "You manage projects, tasks and related customer activity.",
       admin: "You administer accounts, documents and audit history. Business financials are restricted.",
-      shareholder: "Read-only shareholder view: ownership, contributions, governance documents and reports."
+      shareholder: "Read-only shareholder view: ownership, contributions, governance documents and reports.",
+      transport: "Technical operations view: projects, tasks, documents and reporting (fleet modules hidden)."
     }[session.role];
 
     var html = "";
@@ -572,14 +571,13 @@
     html += '<div class="stat-row">';
     html += statCard("bank", "", fmtETB(received), "Capital received (" + pct + "% collected)");
     html += statCard("chart", "green", fmtETB(income - expense), "Feb operating result*");
-    html += statCard("truck", "teal", D.vehicles.filter(function (v) { return v.status === "Available"; }).length + "/" + D.vehicles.length, "Vehicles available");
     html += statCard("folder", "amber", D.projects.filter(function (p) { return p.status === "In progress"; }).length, "Active projects");
     html += "</div>";
 
     html += '<div class="duo-grid">';
 
     var charts = panel("Revenue plan (3-year outlook)",
-      "Illustrative forecast — not a statutory projection",
+      "Illustrative forecast â€” not a statutory projection",
       barChart(D.revenuePlan));
     var capitalPanel = panel("Capital collection",
       "Paid-in capital vs outstanding commitments",
@@ -595,10 +593,10 @@
     if (session.role === "gm" || session.role === "finance") {
       D.contributions.filter(function (c) { return c.status === "Pending"; }).forEach(function (c) {
         var sh = D.shareholders.filter(function (s) { return s.id === c.sh; })[0];
-        pendingHtml += '<div class="audit-item"><div class="ai-icon">' + svgIcon("bank", 16) + '</div><div><div class="ai-text"><strong>' + c.id + "</strong> · " + fmtETB(c.amount) + " — " + (sh ? sh.name : c.sh) + '</div><div class="ai-time">Contribution awaiting approval</div></div></div>';
+        pendingHtml += '<div class="audit-item"><div class="ai-icon">' + svgIcon("bank", 16) + '</div><div><div class="ai-text"><strong>' + c.id + "</strong> Â· " + fmtETB(c.amount) + " â€” " + (sh ? sh.name : c.sh) + '</div><div class="ai-time">Contribution awaiting approval</div></div></div>';
       });
       D.transactions.filter(function (t) { return t.status === "Pending"; }).forEach(function (t) {
-        pendingHtml += '<div class="audit-item"><div class="ai-icon">' + svgIcon("chart", 16) + '</div><div><div class="ai-text"><strong>' + t.id + "</strong> · " + fmtETB(t.amount) + " — " + t.category + '</div><div class="ai-time">' + t.type + " awaiting approval</div></div></div>";
+        pendingHtml += '<div class="audit-item"><div class="ai-icon">' + svgIcon("chart", 16) + '</div><div><div class="ai-text"><strong>' + t.id + "</strong> Â· " + fmtETB(t.amount) + " â€” " + t.category + '</div><div class="ai-time">' + t.type + " awaiting approval</div></div></div>";
       });
       if (!pendingHtml) pendingHtml = emptyState("Nothing pending approval. Well done.");
     } else {
@@ -607,13 +605,13 @@
     right += panel("Pending approvals", "Entry, approval and authorization are separated", pendingHtml);
 
     var recentAudit = D.auditLog.slice(-4).reverse().map(function (a) {
-      return '<div class="audit-item"><div class="ai-icon">' + svgIcon("shield", 16) + '</div><div><div class="ai-text"><strong>' + esc(a.actor) + "</strong> " + esc(a.action.toLowerCase()) + '</div><div class="ai-time">' + a.time + " · " + a.outcome + "</div></div></div>";
+      return '<div class="audit-item"><div class="ai-icon">' + svgIcon("shield", 16) + '</div><div><div class="ai-text"><strong>' + esc(a.actor) + "</strong> " + esc(a.action.toLowerCase()) + '</div><div class="ai-time">' + a.time + " Â· " + a.outcome + "</div></div></div>";
     }).join("");
     right += panel("Recent audit activity", "Immutable history of sensitive actions", recentAudit);
 
     html += "<div>" + right + "</div>";
     html += "</div>";
-    html += '<p style="font-size:0.76rem; color:var(--text-muted); margin-top:8px">* Operating result = recorded income − recorded expenses for February. It is <strong>not</strong> statutory net profit; depreciation, financing, tax and other required accounting items are excluded.</p>';
+    html += '<p style="font-size:0.76rem; color:var(--text-muted); margin-top:8px">* Operating result = recorded income âˆ’ recorded expenses for February. It is <strong>not</strong> statutory net profit; depreciation, financing, tax and other required accounting items are excluded.</p>';
 
     content().innerHTML = html;
   };
@@ -624,7 +622,7 @@
     var received = D.shareholders.reduce(function (s, sh) { return s + sh.paid; }, 0);
 
     var html = pageHead("Shareholder Register",
-      "14 founders · " + totalShares + " shares issued (planning scenario) · share price " + fmtETB(D.sharePrice),
+      "14 founders Â· " + totalShares + " shares issued (planning scenario) Â· share price " + fmtETB(D.sharePrice),
       (session.role === "finance" || session.role === "gm" || session.role === "admin")
         ? '<button class="btn btn-outline" id="btnExportSH">Export CSV</button> ' +
           '<button class="btn btn-primary" id="btnAddSH">+ Add Shareholder</button>' : "");
@@ -653,17 +651,17 @@
         "<td>" + ((session.role === "finance" || session.role === "gm" || session.role === "admin")
           ? '<button class="btn btn-outline btn-xs" data-edit-sh="' + sh.id + '">Edit</button> ' +
             '<button class="btn btn-danger btn-xs" data-del-sh="' + sh.id + '">Delete</button>'
-          : "—") + "</td></tr>";
+          : "â€”") + "</td></tr>";
     });
 
-    html += panel("Register", "Ownership % = shareholder shares ÷ total issued shares × 100",
+    html += panel("Register", "Ownership % = shareholder shares Ã· total issued shares Ã— 100",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
       "<th>ID</th><th>Shareholder</th><th class='num'>Shares</th><th class='num'>Ownership</th>" +
       "<th class='num'>Commitment</th><th class='num'>Paid</th><th class='num'>Outstanding</th><th>Status</th><th>Admitted</th><th>Actions</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>",
       "", true);
 
-    html += '<p style="font-size:0.76rem; color:var(--text-muted)">Business rule: issued shares, authorized shares, promised contributions and paid-in capital are tracked as distinct quantities. Ownership changes are recorded as events with approval — never silently overwritten. Contact details are stored privately and shown only to authorized roles.</p>';
+    html += '<p style="font-size:0.76rem; color:var(--text-muted)">Business rule: issued shares, authorized shares, promised contributions and paid-in capital are tracked as distinct quantities. Ownership changes are recorded as events with approval â€” never silently overwritten. Contact details are stored privately and shown only to authorized roles.</p>';
 
     content().innerHTML = html;
 
@@ -783,7 +781,7 @@
           : "<span style='font-size:0.78rem;color:var(--text-muted)'>" + c.by + "</span>") + "</td></tr>";
     });
 
-    html += panel("Contribution transactions", D.contributions.length + " records · " +
+    html += panel("Contribution transactions", D.contributions.length + " records Â· " +
       D.contributions.filter(function (c) { return c.status === "Pending"; }).length + " pending approval",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
       "<th>Txn</th><th>Shareholder</th><th class='num'>Amount</th><th>Date</th><th>Method</th><th>Reference</th><th>Status</th><th>Action</th>" +
@@ -831,13 +829,11 @@
         '</div>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Reference</span><input name="reference" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Method</span><input name="method" value="Bank transfer" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
-        '</form>' +
-        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>';
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+        '</form>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Record Contribution";
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitCt = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -866,9 +862,8 @@
           toast("Create failed: " + apiError(e), "error");
         }
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitCt;
-      window.__phgFormHandler_addCtForm = submitCt;
+      el("addCtForm").onsubmit = function (e) { e.preventDefault(); submitCt(); };
       openModal(mb);
     });
   };
@@ -876,7 +871,7 @@
   VIEWS.vehicles = function () {
     var fleetValue = D.vehicles.reduce(function (s, v) { return s + v.purchase; }, 0);
     var html = pageHead("Vehicles", "Fleet asset register with insurance, odometer and status tracking.",
-      session.role === "transport" || session.role === "gm" || session.role === "admin"
+      session.role === "gm" || session.role === "admin"
         ? '<button class="btn btn-primary" id="btnAddVeh">+ Add Vehicle</button>' : "");
 
     html += '<div class="stat-row">';
@@ -887,7 +882,7 @@
     html += "</div>";
 
     var rows = "";
-    var canEditVeh = session.role === "transport" || session.role === "gm" || session.role === "admin";
+    var canEditVeh = session.role === "gm" || session.role === "admin";
     D.vehicles.forEach(function (v) {
       var insSoon = new Date(v.insurance) - new Date("2026-02-18") < 1000 * 60 * 60 * 24 * 120;
       rows += "<tr><td><strong>" + v.id + "</strong></td><td>" + v.plate + "</td><td>" + v.make + " " + v.model + "</td>" +
@@ -937,9 +932,6 @@
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create Vehicle";
-      el("modalOk").onclick = null;
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitVeh = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -951,7 +943,7 @@
           model: fd.get("model"),
           year: parseInt(fd.get("year"), 10),
           category: fd.get("category") || "Pickup",
-          driver: fd.get("driver") || "—",
+          driver: fd.get("driver") || "â€”",
           odometer: parseInt(fd.get("odometer"), 10) || 0,
           insurance: fd.get("insurance_until") || null,
           purchase: parseFloat(fd.get("purchase_cost")) || 0,
@@ -968,9 +960,8 @@
           toast("Create failed: " + apiError(e));
         }
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitVeh;
-      window.__phgFormHandler_addVehForm = submitVeh;
+      el("addVehForm").onsubmit = function (e) { e.preventDefault(); submitVeh(); };
       openModal(mb);
     });
   };
@@ -1004,8 +995,6 @@
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalCancel").onclick = null;
-    el("modalCancel").onclick = closeModal;
     var saveVeh = async function () {
       var btn = el("modalOk");
       btn.disabled = true;
@@ -1017,7 +1006,7 @@
         model: fd.get("model"),
         year: parseInt(fd.get("year"), 10),
         category: fd.get("category") || "Pickup",
-        driver: fd.get("driver") || "—",
+        driver: fd.get("driver") || "â€”",
         odometer: parseInt(fd.get("odometer"), 10) || 0,
         insurance: fd.get("insurance_until") || null,
         purchase: parseFloat(fd.get("purchase_cost")) || 0,
@@ -1025,9 +1014,8 @@
       };
       try { await PHG_API.update("vehicles", code, payload); closeModal(); toast(code + " updated.", "success"); navigate("vehicles"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    el("modalOk").onclick = null;
     el("modalOk").onclick = saveVeh;
-    window.__phgFormHandler_editVehForm = saveVeh;
+    el("editVehForm").onsubmit = function (e) { e.preventDefault(); saveVeh(); };
     openModal(mb);
   }
 
@@ -1036,7 +1024,7 @@
     var revenue = D.trips.reduce(function (s, t) { return s + t.price; }, 0);
     var fuel = D.trips.reduce(function (s, t) { return s + t.fuel; }, 0);
     var html = pageHead("Trips & Bookings", "Trip records link customer, vehicle, driver, route and cost.",
-      session.role === "transport" || session.role === "gm" || session.role === "admin"
+      session.role === "gm" || session.role === "admin"
         ? '<button class="btn btn-primary" id="btnAddTrip">+ Book Trip</button>' : "");
 
     html += '<div class="stat-row">';
@@ -1049,7 +1037,7 @@
     var rows = "";
     D.trips.forEach(function (t) {
       rows += "<tr><td><strong>" + t.id + "</strong></td><td>" + esc(t.customer) + "</td><td>" + t.vehicle + "</td><td>" + t.driver + "</td>" +
-        "<td>" + t.route + "</td><td>" + t.start + " → " + t.end + "</td>" +
+        "<td>" + t.route + "</td><td>" + t.start + " â†’ " + t.end + "</td>" +
         '<td class="num">' + fmtETB(t.price) + '</td><td class="num">' + fmtETB(t.fuel) + "</td><td>" + badgeFor(t.status) + "</td></tr>";
     });
 
@@ -1061,7 +1049,7 @@
     content().innerHTML = html;
     var b = el("btnAddTrip");
     if (b) b.addEventListener("click", function () {
-      // §7.2: real POST /trips/ — no demo fallback.
+      // Â§7.2: real POST /trips/ â€” no demo fallback.
       openFormModal("Book Trip", [
         { name: "customer", label: "Customer", required: true },
         { name: "route", label: "Route", required: true },
@@ -1105,7 +1093,7 @@
   /* ---------- Drivers ---------- */
   VIEWS.drivers = function () {
     var html = pageHead("Drivers", "Driver roster with licence class, status and trip history. Only licensed drivers are assigned to trips.",
-      session.role === "transport" || session.role === "gm" || session.role === "admin"
+      session.role === "gm" || session.role === "admin"
         ? '<button class="btn btn-primary" id="btnAddDriver">+ Add Driver</button>' : "");
 
     html += '<div class="stat-row">';
@@ -1130,7 +1118,7 @@
     content().innerHTML = html;
     var bd = el("btnAddDriver");
     if (bd) bd.addEventListener("click", function () {
-      // §7.2: real POST /drivers/ — no demo fallback.
+      // Â§7.2: real POST /drivers/ â€” no demo fallback.
       openFormModal("Add Driver", [
         { name: "name", label: "Full name", required: true },
         { name: "licence", label: "Licence class (e.g. C)", required: true },
@@ -1163,7 +1151,7 @@
       leadRows += "<tr><td><strong>" + l.id + "</strong></td><td>" + l.source + "</td><td>" + l.service + "</td>" +
         '<td class="num">' + fmtETB(l.value) + "</td><td>" + l.assignee + "</td><td>" + badgeFor(l.stage) + "</td><td>" + l.follow + "</td></tr>";
     });
-    html += panel("Lead pipeline", "Stages: New → Contacted → Qualified → Quotation sent → Negotiation → Won/Lost",
+    html += panel("Lead pipeline", "Stages: New â†’ Contacted â†’ Qualified â†’ Quotation sent â†’ Negotiation â†’ Won/Lost",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
       "<th>Lead</th><th>Source</th><th>Service</th><th class='num'>Value</th><th>Assignee</th><th>Stage</th><th>Follow-up</th>" +
       "</tr></thead><tbody>" + leadRows + "</tbody></table></div>", "", true);
@@ -1184,7 +1172,7 @@
   VIEWS.projects = function () {
     var totalValue = D.projects.reduce(function (s, p) { return s + p.value; }, 0);
     var totalSpent = D.projects.reduce(function (s, p) { return s + p.spent; }, 0);
-    var html = pageHead("Projects", "Statuses: Lead → Quotation → Approved → In progress → Under review → Completed → Closed");
+    var html = pageHead("Projects", "Statuses: Lead â†’ Quotation â†’ Approved â†’ In progress â†’ Under review â†’ Completed â†’ Closed");
 
     html += '<div class="stat-row">';
     html += statCard("folder", "", D.projects.length, "Projects");
@@ -1258,7 +1246,7 @@
         '<td class="num">' + fmtETB(t.amount) + "</td><td>" + badgeFor(t.status) + "</td>" +
         "<td>" + (canApprove && t.status === "Pending"
           ? '<button class="btn btn-success btn-xs" data-approve-tx="' + t.id + '">Approve</button>'
-          : "<span style='font-size:0.74rem;color:var(--text-muted)'>—</span>") + "</td></tr>";
+          : "<span style='font-size:0.74rem;color:var(--text-muted)'>â€”</span>") + "</td></tr>";
     });
 
     html += panel("Transaction register", "Supporting evidence required for material expenses; approved records cannot be silently edited.",
@@ -1299,13 +1287,11 @@
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Amount (ETB)</span><input name="amount" type="number" min="0.01" step="any" required style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '<label style="display:flex;flex-direction:column;font-size:0.85rem"><span style="color:#64748b;margin-bottom:4px">Reference</span><input name="reference" style="padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px"></label>' +
         '</div>' +
-        '</form>' +
-        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>';
+        '<button type="submit" style="position:absolute;opacity:0;width:0;height:0;border:none;padding:0;margin:0;pointer-events:none"></button>' +
+        '</form>';
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Record Transaction";
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitTx = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -1331,9 +1317,8 @@
           toast("Create failed: " + apiError(e), "error");
         }
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitTx;
-      window.__phgFormHandler_addTxForm = submitTx;
+      el("addTxForm").onsubmit = function (e) { e.preventDefault(); submitTx(); };
       openModal(mb);
     });
   };
@@ -1366,8 +1351,8 @@
 
   /* ---------- Documents ---------- */
   VIEWS.documents = function () {
-    var canEditDoc = session.role === "admin" || session.role === "gm" || session.role === "transport" || session.role === "projects";
-    var html = pageHead("Documents", "Private, categorized storage with authorized downloads — never public URLs.",
+    var canEditDoc = session.role === "admin" || session.role === "gm" || session.role === "projects";
+    var html = pageHead("Documents", "Private, categorized storage with authorized downloads â€” never public URLs.",
       canEditDoc ? '<button class="btn btn-primary" id="btnAddDoc">+ Add Document</button>' : "");
     var rows = "";
     D.documents.forEach(function (d) {
@@ -1390,7 +1375,7 @@
       } else {
         content().querySelectorAll('[data-doc="' + d.id + '"]').forEach(function (btn) {
           btn.addEventListener("click", function () {
-            toast("Document metadata only — file download is unavailable until file storage is configured.", "error");
+            toast("Document metadata only â€” file download is unavailable until file storage is configured.", "error");
           });
         });
       }
@@ -1414,8 +1399,6 @@
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitDoc = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -1438,9 +1421,8 @@
           toast("Create failed: " + apiError(e), "error");
         }
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitDoc;
-      window.__phgFormHandler_addDocForm = submitDoc;
+      el("addDocForm").onsubmit = function (e) { e.preventDefault(); submitDoc(); };
       openModal(mb);
     });
   };
@@ -1461,8 +1443,6 @@
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalCancel").onclick = null;
-    el("modalCancel").onclick = closeModal;
     var saveDoc = async function () {
       var btn = el("modalOk");
       btn.disabled = true;
@@ -1476,9 +1456,8 @@
       };
       try { await PHG_API.update("documents", code, payload); closeModal(); toast(code + " updated.", "success"); navigate("documents"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    el("modalOk").onclick = null;
     el("modalOk").onclick = saveDoc;
-    window.__phgFormHandler_editDocForm = saveDoc;
+    el("editDocForm").onsubmit = function (e) { e.preventDefault(); saveDoc(); };
     openModal(mb);
   }
 
@@ -1492,14 +1471,14 @@
       rows += "<tr><td><strong>" + m.id + "</strong></td><td>" + m.type + "</td><td>" + m.date + "</td><td>" + m.attendees + "</td>" +
         "<td>" + badgeFor(m.status) + "</td><td>" + esc(m.summary) + "</td></tr>";
     });
-    html += panel("Meeting register", "Voting, quorum and approval thresholds follow the company's governing documents — not assumptions.",
+    html += panel("Meeting register", "Voting, quorum and approval thresholds follow the company's governing documents â€” not assumptions.",
       '<div class="table-scroll"><table class="pt"><thead><tr>' +
       "<th>Meeting</th><th>Type</th><th>Date</th><th>Attendance</th><th>Status</th><th>Summary</th>" +
       "</tr></thead><tbody>" + rows + "</tbody></table></div>", "", true);
     content().innerHTML = html;
     var bm = el("btnAddMeeting");
     if (bm) bm.addEventListener("click", function () {
-      // §7.2: real POST /meetings/ — no demo fallback.
+      // Â§7.2: real POST /meetings/ â€” no demo fallback.
       openFormModal("Record Meeting", [
         { name: "type", label: "Type (e.g. Board)", required: true },
         { name: "date", label: "Date (YYYY-MM-DD)", required: true },
@@ -1522,8 +1501,7 @@
       ["Shareholder ownership & contributions", "Register with ownership %, paid-in and outstanding per founder.", "shareholders"],
       ["Capital collection status", "Total agreed vs received vs outstanding with collection rate.", "shareholders"],
       ["Revenue & expenses by period", "Income and expense transactions by date and category.", "finance"],
-      ["Division performance", "Approved income split across Transport and Technical divisions.", "finance"],
-      ["Transport utilization & trip profitability", "Trips, revenue, fuel and margin by vehicle and route.", "trips"],
+      ["Division performance", "Approved income split across divisions.", "finance"],
       ["Vehicle maintenance costs", "Service history costs with next-due schedule.", "maintenance"],
       ["Project status & profitability", "Contract value vs actual expenses and progress.", "projects"],
       ["Approvals & audit events", "Immutable log of sensitive actions and outcomes.", "audit"]
@@ -1543,7 +1521,7 @@
     });
     cardsHtml += "</div>";
     html += panel("Available reports", "Exports are limited to authorized users; sensitive data requires appropriate role.", cardsHtml);
-    html += '<p style="font-size:0.76rem; color:var(--text-muted)">Reports display generation date, applied filters and currency (ETB). Currency conversion is never performed silently — an explicit exchange rate, source and date are required.</p>';
+    html += '<p style="font-size:0.76rem; color:var(--text-muted)">Reports display generation date, applied filters and currency (ETB). Currency conversion is never performed silently â€” an explicit exchange rate, source and date are required.</p>';
 
     content().innerHTML = html;
     content().querySelectorAll("[data-report]").forEach(function (btn) {
@@ -1579,12 +1557,12 @@
 
   /* ---------- Audit log ---------- */
   VIEWS.audit = function () {
-    var html = pageHead("Audit Log", "Immutable history of sensitive actions — who did what, when, and the outcome.");
+    var html = pageHead("Audit Log", "Immutable history of sensitive actions â€” who did what, when, and the outcome.");
     var items = D.auditLog.slice().reverse().map(function (a) {
       var tone = a.outcome === "Blocked" ? "style='background:#fee2e2; color:var(--red-500)'" : "";
       return '<div class="audit-item"><div class="ai-icon" ' + tone + ">" + svgIcon("shield", 16) + "</div>" +
-        '<div style="flex:1"><div class="ai-text"><strong>' + esc(a.actor) + "</strong> — " + esc(a.action) + "</div>" +
-        '<div class="ai-time">' + a.time + " · target " + a.target + " · " + a.outcome + "</div></div></div>";
+        '<div style="flex:1"><div class="ai-text"><strong>' + esc(a.actor) + "</strong> â€” " + esc(a.action) + "</div>" +
+        '<div class="ai-time">' + a.time + " Â· target " + a.target + " Â· " + a.outcome + "</div></div></div>";
     }).join("");
     html += panel("Audit events", "Log records cannot be edited or deleted through the application.", items, "", true);
     content().innerHTML = html;
@@ -1610,7 +1588,7 @@
       ["Shareholder", "View permitted ownership, capital, reports, meeting records and notices"],
       ["General manager", "Operations, approvals, business performance, staff coordination"],
       ["Finance officer", "Contributions, expenses, invoices, payments and financial reports"],
-      ["Transport manager", "Vehicles, drivers, bookings, trip records, fuel and maintenance"],
+
       ["Technical project manager", "Technical projects, tasks, assignments, deliverables and deadlines"],
       ["Sales / customer service", "Leads, customer records, quotations and service requests"],
       ["Auditor (read-only)", "Access approved reports and audit records without editing business data"]
@@ -1627,13 +1605,13 @@
     content().innerHTML = html;
     var inviteBtn = el("btnInvite");
     if (inviteBtn) inviteBtn.addEventListener("click", function () {
-      // §8: real admin-controlled POST /users/ — never self-elevation.
+      // Â§8: real admin-controlled POST /users/ â€” never self-elevation.
       // The new account is created Inactive-equivalent ("Invited") so an
       // admin must activate it; the backend ignores any client role games.
       openFormModal("Invite User", [
         { name: "email", label: "Email", required: true },
         { name: "first_name", label: "First name", required: true },
-        { name: "role", label: "Role (admin/gm/finance/transport/projects/sales/shareholder/auditor)", required: true }
+        { name: "role", label: "role (admin/gm/finance/projects/sales/shareholder/auditor)", required: true }
       ], function (vals, done) {
         PHG_API.create("users", {
           email: vals.email, username: vals.email.split("@")[0],
@@ -1657,12 +1635,12 @@
       "</div>");
     html += panel("Security posture", "Controls enforced in production",
       '<ul style="list-style:none; display:grid; gap:10px; font-size:0.88rem">' +
-      "<li>✓ Secure HTTP-only session cookies with CSRF protection</li>" +
-      "<li>✓ Backend authorization on every protected endpoint (role + object level)</li>" +
-      "<li>✓ Rate-limited login, password-reset and sensitive endpoints</li>" +
-      "<li>✓ Multi-factor authentication available for privileged users</li>" +
-      "<li>✓ HTTPS enforced in production; secrets kept outside source control</li>" +
-      "<li>✓ Automated database backups with periodic restore tests</li>" +
+      "<li>âœ“ Secure HTTP-only session cookies with CSRF protection</li>" +
+      "<li>âœ“ Backend authorization on every protected endpoint (role + object level)</li>" +
+      "<li>âœ“ Rate-limited login, password-reset and sensitive endpoints</li>" +
+      "<li>âœ“ Multi-factor authentication available for privileged users</li>" +
+      "<li>âœ“ HTTPS enforced in production; secrets kept outside source control</li>" +
+      "<li>âœ“ Automated database backups with periodic restore tests</li>" +
       "</ul>");
     content().innerHTML = html;
   };
@@ -1678,7 +1656,7 @@
       id: "AU-" + (9000 + D.auditLog.length + 1),
       actor: session ? session.title : "System",
       action: action,
-      target: target || "—",
+      target: target || "â€”",
       time: stamp,
       outcome: outcome || "Success"
     });
@@ -1704,20 +1682,8 @@
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Confirm";
-    el("modalOk").onclick = null;
-    el("modalCancel").onclick = null;
-    el("modalCancel").onclick = closeModal;
+    el("modalOk").onclick = function () { closeModal(); onConfirm(); };
     openModal(backdrop);
-    function cleanup() {
-      closeModal();
-      okBtn.removeEventListener("click", ok);
-      cancelBtn.removeEventListener("click", cleanup);
-    }
-    function ok() { cleanup(); onConfirm(); }
-    var okBtn = el("modalOk");
-    var cancelBtn = el("modalCancel");
-    okBtn.addEventListener("click", ok);
-    cancelBtn.addEventListener("click", cleanup);
   }
 
   /* Notifications bell */
@@ -1761,8 +1727,31 @@
     updateBell();
 
     el("btnLogout").addEventListener("click", logout);
+    var sidebarBackdrop = null;
+    function closeSidebar() {
+      el("portalSidebar").classList.remove("open");
+      document.body.classList.remove("portal-nav-open");
+      if (sidebarBackdrop) sidebarBackdrop.classList.remove("open");
+    }
+    function openSidebar() {
+      el("portalSidebar").classList.add("open");
+      document.body.classList.add("portal-nav-open");
+      if (!sidebarBackdrop) {
+        sidebarBackdrop = document.createElement("div");
+        sidebarBackdrop.className = "portal-sidebar-backdrop";
+        document.body.appendChild(sidebarBackdrop);
+        sidebarBackdrop.addEventListener("click", closeSidebar);
+      }
+      sidebarBackdrop.classList.add("open");
+    }
     el("sidebarToggle").addEventListener("click", function () {
-      el("portalSidebar").classList.toggle("open");
+      if (el("portalSidebar").classList.contains("open")) closeSidebar(); else openSidebar();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") closeSidebar();
+    });
+    el("portalSidebar").addEventListener("click", function (e) {
+      if (e.target.tagName === "A") closeSidebar();
     });
 
     el("btnRefresh").addEventListener("click", function () {
@@ -1787,9 +1776,12 @@
       if (session) navigate("notifications");
     });
 
-    el("modalClose").addEventListener("click", closeModal);
+    /* Delegated modal close: X button (data-close), Cancel button (data-cancel), and backdrop click.
+       Uses closest() so a click on the SVG icon inside the X button still resolves to the button. */
     el("modalBackdrop").addEventListener("click", function (e) {
-      if (e.target === el("modalBackdrop")) closeModal();
+      if (e.target === el("modalBackdrop")) { closeModal(); return; }
+      var closer = e.target.closest && e.target.closest("[data-close], [data-cancel]");
+      if (closer) closeModal();
     });
     /* Global: Escape closes any open modal */
     document.addEventListener("keydown", function (e) {
@@ -1798,21 +1790,11 @@
         if (mb && mb.classList.contains("open")) closeModal();
       }
     });
-    /* Global: delegate form submits so modal/CRUD forms never trigger a page reload */
+    /* Global: prevent page reload on form submit inside modal body */
     document.addEventListener("submit", function (e) {
       var form = e.target.closest("form");
-      if (!form) return;
+      if (!form || !form.closest("#modalBody")) return;
       e.preventDefault();
-      var btn = form.querySelector("button[type=submit], input[type=submit]");
-      if (btn && typeof btn.onclick === "function") {
-        btn.onclick(e);
-      } else {
-        var formId = form.id;
-        if (formId) {
-          var handler = window["__phgFormHandler_" + formId];
-          if (typeof handler === "function") handler(e);
-        }
-      }
     }, true);
 
     function startPoll() {
@@ -1827,7 +1809,7 @@
   });
   /* ---------- Maintenance CRUD ---------- */
   VIEWS.maintenance = function () {
-    var canEdit = session.role === "admin" || session.role === "gm" || session.role === "transport";
+    var canEdit = session.role === "admin" || session.role === "gm";
     var html = pageHead("Maintenance Records", "Full service history per vehicle.", canEdit ? '<button class="btn btn-primary" id="btnAddMaintenance">+ Add Record</button>' : "");
     var rows = "";
     (D.maintenance || []).forEach(function (m) {
@@ -1861,8 +1843,6 @@
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitMaint = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -1871,9 +1851,8 @@
         if (!p.vehicle) { toast("Vehicle required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
         try { await PHG_API.create("maintenance", p); closeModal(); toast("Created.","success"); navigate("maintenance"); } catch(e){btn.disabled = false; btn.textContent = "Create"; toast("Failed: "+apiError(e),"error");}
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitMaint;
-      window.__phgFormHandler_addMaintForm = submitMaint;
+      el("addMaintForm").onsubmit = function (e) { e.preventDefault(); submitMaint(); };
       openModal(mb);
     });
   };
@@ -1895,8 +1874,6 @@
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalCancel").onclick = null;
-    el("modalCancel").onclick = closeModal;
     var saveMaint = async function () {
       var btn = el("modalOk");
       btn.disabled = true;
@@ -1904,9 +1881,8 @@
       var p = { vehicle: el("mVehicle").value.trim(), date: el("mDate").value.trim() || null, provider: el("mProvider").value.trim(), work: el("mWork").value.trim(), cost: parseFloat(el("mCost").value) || 0, next: el("mNext").value.trim() || null, status: el("mStatus").value };
       try { await PHG_API.update("maintenance", id, p); closeModal(); toast(id + " updated.", "success"); navigate("maintenance"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    el("modalOk").onclick = null;
     el("modalOk").onclick = saveMaint;
-    window.__phgFormHandler_editMaintForm = saveMaint;
+    el("editMaintForm").onsubmit = function (e) { e.preventDefault(); saveMaint(); };
     openModal(mb);
   }
 
@@ -1938,7 +1914,7 @@
       body.innerHTML = '<form id="addProjectForm" style="display:grid;gap:10px"><div class="form-group"><label>Code</label><input type="text" class="form-control" id="pCode"></div>' +
         '<div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName"></div>' +
         '<div class="form-group"><label>Customer</label><input type="text" class="form-control" id="pCustomer"></div>' +
-        '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option>Technical</option><option>Transport</option><option>Shared</option></select></div>' +
+        '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option>Technical</option><option>Shared</option></select></div>' +
         '<div class="form-group"><label>Manager</label><input type="text" class="form-control" id="pManager"></div>' +
         '<div class="form-group"><label>Value</label><input type="number" class="form-control" id="pValue" step="0.01"></div>' +
         '<div class="form-group"><label>Priority</label><select class="form-control" id="pPriority"><option>Low</option><option selected>Medium</option><option>High</option></select></div>' +
@@ -1949,8 +1925,6 @@
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitProject = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -1959,9 +1933,8 @@
         if (!p.code || !p.name) { toast("Code and Name required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
         try { await PHG_API.create("projects", p); closeModal(); toast("Created.","success"); navigate("projects"); } catch(e){btn.disabled = false; btn.textContent = "Create"; toast("Failed: "+apiError(e),"error");}
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitProject;
-      window.__phgFormHandler_addProjectForm = submitProject;
+      el("addProjectForm").onsubmit = function (e) { e.preventDefault(); submitProject(); };
       openModal(mb);
     });
   };
@@ -1973,7 +1946,7 @@
     el("modalTitle").textContent = "Edit Project " + id;
     body.innerHTML = '<form id="editProjectForm" style="display:grid;gap:10px"><div class="form-group"><label>Name</label><input type="text" class="form-control" id="pName" value="' + esc(p.name||"") + '"></div>' +
       '<div class="form-group"><label>Customer</label><input type="text" class="form-control" id="pCustomer" value="' + esc(p.customer||"") + '"></div>' +
-      '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option' + (p.division==="Technical"?" selected":"") + '>Technical</option><option' + (p.division==="Transport"?" selected":"") + '>Transport</option><option' + (p.division==="Shared"?" selected":"") + '>Shared</option></select></div>' +
+      '<div class="form-group"><label>Division</label><select class="form-control" id="pDivision"><option' + (p.division==="Technical"?" selected":"") + '>Technical</option><option' + (p.division==="Shared"?" selected":"") + '>Shared</option></select></div>' +
       '<div class="form-group"><label>Manager</label><input type="text" class="form-control" id="pManager" value="' + esc(p.manager||"") + '"></div>' +
       '<div class="form-group"><label>Value</label><input type="number" class="form-control" id="pValue" step="0.01" value="' + (p.value||0) + '"></div>' +
       '<div class="form-group"><label>Priority</label><select class="form-control" id="pPriority"><option' + (p.priority==="Low"?" selected":"") + '>Low</option><option' + (p.priority==="Medium"?" selected":"") + '>Medium</option><option' + (p.priority==="High"?" selected":"") + '>High</option></select></div>' +
@@ -1984,8 +1957,6 @@
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalCancel").onclick = null;
-    el("modalCancel").onclick = closeModal;
     var saveProject = async function () {
       var btn = el("modalOk");
       btn.disabled = true;
@@ -1993,16 +1964,15 @@
       var payload = { name: el("pName").value.trim(), customer: el("pCustomer").value.trim(), division: el("pDivision").value, manager: el("pManager").value.trim(), value: parseFloat(el("pValue").value)||0, priority: el("pPriority").value, status: el("pStatus").value, due: el("pDue").value.trim()||null };
       try { await PHG_API.update("projects", id, payload); closeModal(); toast(id + " updated.", "success"); navigate("projects"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    el("modalOk").onclick = null;
     el("modalOk").onclick = saveProject;
-    window.__phgFormHandler_editProjectForm = saveProject;
+    el("editProjectForm").onsubmit = function (e) { e.preventDefault(); saveProject(); };
     openModal(mb);
   }
 
 
   /* ---------- Tasks CRUD ---------- */
   VIEWS.tasks = function () {
-    var canEdit = session.role === "admin" || session.role === "gm" || session.role === "transport";
+    var canEdit = session.role === "admin" || session.role === "gm";
     var html = pageHead("Tasks", "Task register.", canEdit ? '<button class="btn btn-primary" id="btnAddTask">+ Add Task</button>' : "");
     var rows = "";
     (D.tasks || []).forEach(function (t) {
@@ -2037,8 +2007,6 @@
       el("modalCancel").style.display = "inline-block";
       el("modalOk").style.display = "inline-block";
       el("modalOk").textContent = "Create";
-      el("modalCancel").onclick = null;
-      el("modalCancel").onclick = closeModal;
       var submitTask = async function () {
         var btn = el("modalOk");
         btn.disabled = true;
@@ -2049,9 +2017,8 @@
         if (!t.title) { toast("Title required","error"); btn.disabled = false; btn.textContent = "Create"; return; }
         try { await PHG_API.create("tasks", t); closeModal(); toast("Created.","success"); navigate("tasks"); } catch(e){btn.disabled = false; btn.textContent = "Create"; toast("Failed: "+apiError(e),"error");}
       };
-      el("modalOk").onclick = null;
       el("modalOk").onclick = submitTask;
-      window.__phgFormHandler_addTaskForm = submitTask;
+      el("addTaskForm").onsubmit = function (e) { e.preventDefault(); submitTask(); };
       openModal(mb);
     });
   };
@@ -2073,8 +2040,6 @@
     el("modalCancel").style.display = "inline-block";
     el("modalOk").style.display = "inline-block";
     el("modalOk").textContent = "Save";
-    el("modalCancel").onclick = null;
-    el("modalCancel").onclick = closeModal;
     var saveTask = async function () {
       var btn = el("modalOk");
       btn.disabled = true;
@@ -2082,9 +2047,8 @@
       var payload = { project: el("tProject").value.trim(), title: el("tTitle").value.trim(), assignee: el("tAssignee").value.trim(), priority: el("tPriority").value, status: el("tStatus").value, due: el("tDue").value.trim()||null };
       try { await PHG_API.update("tasks", id, payload); closeModal(); toast(id + " updated.", "success"); navigate("tasks"); } catch (e) { btn.disabled = false; btn.textContent = "Save"; toast("Update failed: " + apiError(e), "error"); }
     };
-    el("modalOk").onclick = null;
     el("modalOk").onclick = saveTask;
-    window.__phgFormHandler_editTaskForm = saveTask;
+    el("editTaskForm").onsubmit = function (e) { e.preventDefault(); saveTask(); };
     openModal(mb);
   }
 

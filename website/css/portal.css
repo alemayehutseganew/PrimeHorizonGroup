@@ -1,8 +1,9 @@
 /* ============================================================
-   Prime Horizon Group — Management Portal
-   Light theme · dark navy sidebar · role-aware demo
+   Prime Horizon Group â€” Management Portal
+   Light theme Â· dark navy sidebar Â· role-aware demo
    ============================================================ */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Ethiopic:wght@400;500;600;700&display=swap");
 
 :root {
   --navy-900: #0b1f3a;
@@ -468,4 +469,13 @@ table.pt strong { color: var(--navy-900); }
   .portal-topbar { padding: 0 16px; }
   .pt-search { display: none; }
 }
-.sidebar-toggle { display: none; background: none; border: 1px solid var(--border); border-radius: 9px; padding: 8px 10px; cursor: pointer; color: var(--navy-800); }
+.portal-sidebar-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(11,31,58,0.45);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.25s ease;
+  z-index: 250;
+}
+.portal-sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
+body.portal-nav-open { overflow: hidden; }
+html[lang="am"] body.portal-body { font-family: "Noto Sans Ethiopic", "Inter", "Segoe UI", system-ui, sans-serif; line-height: 1.75; }
