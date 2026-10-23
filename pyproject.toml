@@ -14,3 +14,7 @@ dependencies = [
   "whitenoise==6.6.0",
   "gunicorn==21.2.0",
 ]
+
+[tool.setuptools]
+packages = ["config", "core"]
+
