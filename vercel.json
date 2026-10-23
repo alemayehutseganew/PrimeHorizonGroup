@@ -11,7 +11,13 @@
     "frontend": {
       "root": "website",
       "outputDirectory": ".",
-      "cleanUrls": true
+      "cleanUrls": true,
+      "rewrites": [
+        {
+          "source": "/",
+          "destination": "/index.html"
+        }
+      ]
     }
   },
   "rewrites": [
