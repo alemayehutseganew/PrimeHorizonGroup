@@ -8,8 +8,9 @@
       "buildCommand": "bash vercel-build.sh"
     },
     "frontend": {
-      "root": ".",
-      "outputDirectory": "website",
+      "root": "website",
+      "framework": "other",
+      "outputDirectory": ".",
       "cleanUrls": true
     }
   },
