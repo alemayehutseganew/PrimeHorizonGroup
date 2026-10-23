@@ -2,26 +2,54 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "buildCommand": "bash vercel-build.sh",
+  "services": {
+    "backend": {
+      "root": ".",
+      "entrypoint": "config.wsgi:application",
+      "framework": null
+    },
+    "frontend": {
+      "root": ".",
+      "framework": null
+    }
+  },
   "rewrites": [
     {
       "source": "/admin",
-      "destination": "/api/index?__phg_path=/admin/"
+      "destination": {
+        "service": "backend"
+      }
     },
     {
       "source": "/admin/:path*",
-      "destination": "/api/index?__phg_path=/admin/:path*"
+      "destination": {
+        "service": "backend"
+      }
     },
     {
       "source": "/api",
-      "destination": "/api/index?__phg_path=/api/"
+      "destination": {
+        "service": "backend"
+      }
     },
     {
       "source": "/api/:path*",
-      "destination": "/api/index?__phg_path=/api/:path*"
+      "destination": {
+        "service": "backend"
+      }
     },
     {
       "source": "/static/admin/:path*",
-      "destination": "/staticfiles/admin/:path*"
+      "destination": {
+        "service": "backend",
+        "path": "/staticfiles/admin/:path*"
+      }
+    },
+    {
+      "source": "/:path*",
+      "destination": {
+        "service": "frontend"
+      }
     }
   ],
   "headers": [
