@@ -35,7 +35,7 @@ def _normalize_path(path):
 
 
 def _restore_path(environ):
-    """Read __phg_path from the query string, restore PATH_INFO, strip it."""
+    """Read __phg_path from the query string, restore PATH_INFO, forward it."""
     qs = environ.get("QUERY_STRING", "")
     if not qs:
         return
@@ -58,6 +58,10 @@ def _restore_path(environ):
         return
 
     normalized = _normalize_path(phg_path)
+
+    # Preserve the original path prefix (both /api/ and /admin/) —
+    # Django's URLconf resolves them natively via path("admin/", ...) and
+    # path("api/", include("core.urls")).
     environ["PATH_INFO"] = normalized
     # Some WSGI adapters also consult REQUEST_URI / RAW_PATH_INFO.
     if "REQUEST_URI" in environ:

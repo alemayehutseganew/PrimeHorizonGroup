@@ -1,16 +1,15 @@
 """
-WSGI entrypoint (used by gunicorn locally and by Vercel's Django runtime).
-
-Adds ackend/ to sys.path so Django's config and core packages are importable.
+WSGI entrypoint (used by gunicorn locally and by the Django management
+commands). api/index.py creates its own WSGI app for Vercel - this module
+is only used by local development and gunicorn.
 """
 import os
 import sys
 
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
-BACKEND_DIR = os.path.join(PROJECT_ROOT, "backend")
-if BACKEND_DIR not in sys.path:
-    sys.path.insert(0, BACKEND_DIR)
+# Repository root: config / core / website packages live here.
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 

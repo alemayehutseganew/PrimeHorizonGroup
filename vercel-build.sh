@@ -2,6 +2,11 @@
 # Vercel build steps — kept out of vercel.json to respect the 256-char limit.
 set -e
 
+# Ensure the project root is on the Python path and Django settings are
+# discovered without the --settings flag.
+export PYTHONPATH="${PYTHONPATH:-}:."
+export DJANGO_SETTINGS_MODULE=config.settings
+
 # Diagnostic: first line of the build log tells us whether the database
 # URL reaches this build (value itself is never printed).
 python -c "import os; print('DBURL_PRESENT=' + str(bool(os.environ.get('DATABASE_URL'))))"
