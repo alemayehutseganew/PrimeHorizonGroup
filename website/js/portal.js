@@ -234,8 +234,7 @@
           err.textContent = "Portal services failed to initialize. Please refresh the page.";
           console.error("PHG_API initialization failure, portal cannot start:", err2);
         } else {
-          err.textContent = d ? ("Login failed: " + d)
-            : ("Login failed: " + ((err2 && (err2.message || String(err2))) || "unknown error"));
+          err.textContent = apiErrText(err2, "Login failed");
           console.error("Login error:", err2);
         }
         err.classList.add("show");
@@ -288,8 +287,10 @@
       var b = e && e.body;
       if (!b) return fallback;
       if (typeof b === "string") return fallback + ": " + b;
-      var d = b.detail || b.email || b.username || b.token ||
-        b.new_password || b.password || b.password_confirmation;
+      var d = b.detail || b.error || b.message ||
+          (Array.isArray(b.non_field_errors) ? b.non_field_errors.join(" ") : b.non_field_errors) ||
+          b.email || b.username || b.token ||
+          b.new_password || b.password || b.password_confirmation;
       if (Array.isArray(d)) d = d.join(" ");
       return d ? (fallback + ": " + d) : fallback;
     }
