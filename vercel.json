@@ -9,8 +9,6 @@
     },
     "frontend": {
       "root": "website",
-      "framework": "other",
-      "outputDirectory": ".",
       "cleanUrls": true
     }
   },
