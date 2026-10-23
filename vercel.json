@@ -9,43 +9,55 @@
     },
     "frontend": {
       "root": "website",
-      "cleanUrls": true
+      "cleanUrls": true,
+      "rewrites": [
+        {
+          "source": "/",
+          "destination": "/index.html"
+        }
+      ]
     }
   },
   "rewrites": [
     {
       "source": "/admin",
       "destination": {
+        "type": "service",
         "service": "backend"
       }
     },
     {
       "source": "/admin/:path*",
       "destination": {
+        "type": "service",
         "service": "backend"
       }
     },
     {
       "source": "/api",
       "destination": {
+        "type": "service",
         "service": "backend"
       }
     },
     {
       "source": "/api/:path*",
       "destination": {
+        "type": "service",
         "service": "backend"
       }
     },
     {
       "source": "/static/admin/:path*",
       "destination": {
+        "type": "service",
         "service": "backend"
       }
     },
     {
       "source": "/:path*",
       "destination": {
+        "type": "service",
         "service": "frontend"
       }
     }
