@@ -4,12 +4,11 @@
     "backend": {
       "root": ".",
       "entrypoint": "config.wsgi:application",
-      "installCommand": "pip install --break-system-packages -r requirements.txt && python -m pip install --break-system-packages --force-reinstall --no-cache-dir --no-deps psycopg2-binary",
+      "installCommand": "pip install --break-system-packages -r requirements.txt",
       "buildCommand": "bash vercel-build.sh"
     },
     "frontend": {
       "root": ".",
-      "framework": null,
       "outputDirectory": "website",
       "cleanUrls": true
     }
@@ -42,8 +41,7 @@
     {
       "source": "/static/admin/:path*",
       "destination": {
-        "service": "backend",
-        "path": "/staticfiles/admin/:path*"
+        "service": "backend"
       }
     },
     {
@@ -56,31 +54,13 @@
   "redirects": [
     {
       "source": "/static/css/:path*",
-      "destination": "/css/:path*"
+      "destination": "/css/:path*",
+      "permanent": true
     },
     {
       "source": "/static/js/:path*",
-      "destination": "/js/:path*"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/static/css/(.*)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "text/css; charset=utf-8"
-        }
-      ]
-    },
-    {
-      "source": "/static/js/(.*)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/javascript; charset=utf-8"
-        }
-      ]
+      "destination": "/js/:path*",
+      "permanent": true
     }
   ]
 }
