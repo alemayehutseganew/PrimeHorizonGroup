@@ -10,6 +10,7 @@
     },
     "frontend": {
       "root": "website",
+      "outputDirectory": ".",
       "cleanUrls": true
     }
   },
