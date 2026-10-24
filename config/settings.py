@@ -39,7 +39,7 @@ if os.environ.get("VERCEL"):
 _cors_env = os.environ.get("CORS_ALLOWED_ORIGINS", "")
 CORS_ALLOWED_ORIGINS = [
     o.strip() for o in _cors_env.split(",") if o.strip()
-] or ["http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:5500", "http://localhost:5500"]
+] or ["http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5500", "http://localhost:5500"]
 if _vercel_url:
     CORS_ALLOWED_ORIGINS.append(f"https://{_vercel_url}")
 CORS_ALLOW_CREDENTIALS = True
@@ -52,7 +52,7 @@ CORS_ALLOW_HEADERS = ["content-type", "authorization", "content-length", "accept
 _csrf_env = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 CSRF_TRUSTED_ORIGINS = [
     o.strip() for o in _csrf_env.split(",") if o.strip()
-] or ["http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:5500", "http://localhost:5500"]
+] or ["http://127.0.0.1:8000", "http://localhost:8000", "http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5500", "http://localhost:5500"]
 if _vercel_url:
     CSRF_TRUSTED_ORIGINS.append(f"https://{_vercel_url}")
 if os.environ.get("VERCEL"):
