@@ -47,6 +47,7 @@ import {Services} from './pages/Services';
 import {Projects} from './pages/Projects';
 import {Contact} from './pages/Contact';
 import {Careers} from './pages/Careers';
+import {Partnership} from './pages/Partnership';
 import {Privacy} from './pages/Privacy';
 import {Terms} from './pages/Terms';
 import {Portal} from './pages/Portal';
@@ -79,6 +80,7 @@ export default function App() {
           <Route path='services' element={<Services />} />
           <Route path='projects' element={<Projects />} />
           <Route path='careers' element={<Careers />} />
+          <Route path='partnership' element={<Partnership />} />
           <Route path='contact' element={<Contact />} />
           <Route path='privacy' element={<Privacy />} />
           <Route path='terms' element={<Terms />} />

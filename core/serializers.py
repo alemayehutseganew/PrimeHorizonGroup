@@ -1,4 +1,5 @@
 """DRF serializers — field names match the frontend data.js shape."""
+import os
 from datetime import date as _date
 from datetime import datetime as _datetime
 
@@ -29,6 +30,9 @@ from .models import (
     MaintenanceRecord,
     Meeting,
     Notification,
+    PartnershipAttachment,
+    PartnershipRequest,
+
     Payment,
     Project,
     Shareholder,
@@ -364,3 +368,105 @@ class AuditLogSerializer(serializers.ModelSerializer):
 
     def get_time(self, obj):
         return obj.created_at.strftime("%Y-%m-%d %H:%M")
+class PartnershipAttachmentSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PartnershipAttachment
+        fields = ["id", "original_name", "content_type", "size",
+                  "uploaded_at", "url"]
+        read_only_fields = fields
+
+    def get_url(self, obj):
+        # Attachments are never exposed through unrestricted public URLs.
+        return None
+
+
+class PartnershipRequestCreateSerializer(serializers.ModelSerializer):
+    attachments = serializers.ListField(
+        child=serializers.FileField(), required=False, write_only=True,
+    )
+
+    class Meta:
+        model = PartnershipRequest
+        fields = [
+            "request_type", "sector", "organization_name", "contact_name",
+            "contact_role", "email", "phone", "country", "location",
+            "subject", "requirements", "deliverables", "timeline", "budget",
+            "procurement_reference", "privacy_acknowledged", "attachments",
+        ]
+
+    def validate_privacy_acknowledged(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                "You must acknowledge the privacy and data-use notice.")
+        return value
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def create(self, validated_data):
+        attachments = validated_data.pop("attachments", [])
+        request = self.context.get("request")
+        uploaded_files = []
+        if request is not None:
+            uploaded_files = request.FILES.getlist("attachments")
+        if not uploaded_files and attachments:
+            uploaded_files = attachments
+
+        instance = PartnershipRequest.objects.create(**validated_data)
+
+        allowed_ext = {".pdf", ".doc", ".docx", ".xls", ".xlsx",
+                       ".png", ".jpg", ".jpeg", ".txt"}
+        max_size = 5 * 1024 * 1024
+        max_files = 5
+        if len(uploaded_files) > max_files:
+            raise serializers.ValidationError(
+                {"attachments": f"At most {max_files} attachments are allowed."})
+        for uploaded in uploaded_files:
+            ext = os.path.splitext(uploaded.name)[1].lower()
+            if ext not in allowed_ext:
+                raise serializers.ValidationError(
+                    {"attachments": f"File type not allowed: {uploaded.name}"})
+            if uploaded.size > max_size:
+                raise serializers.ValidationError(
+                    {"attachments": f"File too large: {uploaded.name}"})
+            PartnershipAttachment.objects.create(
+                request=instance,
+                file=uploaded,
+                original_name=uploaded.name,
+                content_type=getattr(uploaded, "content_type", "") or "",
+                size=uploaded.size,
+            )
+        return instance
+
+
+class PartnershipRequestPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PartnershipRequest
+        fields = ["reference", "request_type", "status", "created_at"]
+        read_only_fields = fields
+
+
+class PartnershipRequestStaffSerializer(serializers.ModelSerializer):
+    assigned_to_name = serializers.CharField(
+        source="assigned_to.get_full_name", read_only=True)
+    attachments = PartnershipAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PartnershipRequest
+        fields = [
+            "reference", "request_type", "sector", "organization_name",
+            "contact_name", "contact_role", "email", "phone", "country",
+            "location", "subject", "requirements", "deliverables", "timeline",
+            "budget", "procurement_reference", "privacy_acknowledged",
+            "status", "assigned_to", "assigned_to_name", "internal_notes",
+            "attachments", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "reference", "request_type", "sector", "organization_name",
+            "contact_name", "contact_role", "email", "phone", "country",
+            "location", "subject", "requirements", "deliverables", "timeline",
+            "budget", "procurement_reference", "privacy_acknowledged",
+            "attachments", "created_at", "updated_at",
+        ]

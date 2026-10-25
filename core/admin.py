@@ -14,6 +14,9 @@ from .models import (
     MaintenanceRecord,
     Meeting,
     Notification,
+    PartnershipAttachment,
+    PartnershipRequest,
+
     Payment,
     Project,
     Shareholder,
@@ -162,3 +165,31 @@ class AuditLogAdmin(admin.ModelAdmin):
 admin.site.site_header = "Prime Horizon Group Plc Administration"
 admin.site.site_title = "Prime Horizon Group Plc Administration"
 admin.site.index_title = "Prime Horizon Group Plc Management"
+@admin.register(PartnershipRequest)
+class PartnershipRequestAdmin(admin.ModelAdmin):
+    list_display = ("reference", "request_type", "sector",
+                    "organization_name", "contact_name", "status",
+                    "created_at")
+    list_filter = ("status", "request_type", "sector", "created_at")
+    search_fields = ("reference", "organization_name", "contact_name",
+                     "email", "subject", "procurement_reference")
+    readonly_fields = ("reference", "created_at", "updated_at")
+    fieldsets = (
+        (None, {"fields": ("reference", "request_type", "sector",
+                           "organization_name", "contact_name", "contact_role",
+                           "email", "phone", "country", "location", "subject")}),
+        ("Details", {"fields": ("requirements", "deliverables", "timeline",
+                                "budget", "procurement_reference",
+                                "privacy_acknowledged")}),
+        ("Management", {"fields": ("status", "assigned_to",
+                                   "internal_notes")}),
+        ("Timestamps", {"fields": ("created_at", "updated_at")}),
+    )
+
+
+@admin.register(PartnershipAttachment)
+class PartnershipAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("original_name", "request", "content_type", "size",
+                    "uploaded_at")
+    search_fields = ("original_name", "request__reference")
+    readonly_fields = ("uploaded_at",)

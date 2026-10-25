@@ -43,6 +43,7 @@ export default function Header() {
               <li><Link to="/services" className="nav-link">Services</Link></li>
               <li><Link to="/projects" className="nav-link">Projects</Link></li>
               <li><Link to="/careers" className="nav-link">Careers</Link></li>
+              <li><Link to="/partnership" className="nav-link">Partnership</Link></li>
               <li><Link to="/contact" className="nav-link">Contact</Link></li>
             </ul>
             <div className="nav-actions">
@@ -58,6 +59,7 @@ export default function Header() {
           <li><Link to="/services" className="nav-mobile-link" onClick={() => setMobileOpen(false)}>Services</Link></li>
           <li><Link to="/projects" className="nav-mobile-link" onClick={() => setMobileOpen(false)}>Projects</Link></li>
           <li><Link to="/careers" className="nav-mobile-link" onClick={() => setMobileOpen(false)}>Careers</Link></li>
+          <li><Link to="/partnership" className="nav-mobile-link" onClick={() => setMobileOpen(false)}>Partnership</Link></li>
           <li><Link to="/contact" className="nav-mobile-link" onClick={() => setMobileOpen(false)}>Contact</Link></li>
           <li><Link to="/portal" className="nav-mobile-link nav-mobile-portal" onClick={() => setMobileOpen(false)}>Shareholder Portal</Link></li>
         </ul>

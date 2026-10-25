@@ -53,6 +53,8 @@ router.register("notifications", views.NotificationViewSet, basename="notificati
 router.register("audit", views.AuditLogViewSet, basename="audit")
 
 router.register("users", views.UserViewSet, basename="user")
+router.register("partnership-requests", views.PartnershipRequestViewSet, basename="partnership-request")
+
 
 
 

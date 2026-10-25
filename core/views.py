@@ -35,6 +35,11 @@ from .models import (
     Driver,
     EmailVerification,
     Inquiry,
+    PartnershipRequest,
+    PartnershipAttachment,
+    PartnershipRequestStatus,
+
+
     Invoice,
     Lead,
     MaintenanceRecord,
@@ -58,6 +63,10 @@ from .serializers import (
     ContributionSerializer,
     CustomerSerializer,
     DocumentSerializer,
+    PartnershipRequestCreateSerializer,
+    PartnershipRequestPublicSerializer,
+    PartnershipRequestStaffSerializer,
+
     DriverSerializer,
     InquirySerializer,
     InvoiceSerializer,
@@ -890,3 +899,55 @@ class TokenObtainPairView(TokenRefreshView):
             }).data
         )
 
+class PartnershipRequestThrottle(AnonRateThrottle):
+    rate = "10/minute"
+
+
+class PartnershipRequestViewSet(viewsets.ModelViewSet):
+    queryset = PartnershipRequest.objects.prefetch_related("attachments").all()
+    serializer_class = PartnershipRequestStaffSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+    filterset_fields = ["reference", "request_type", "sector",
+                        "organization_name", "status", "created_at"]
+    search_fields = ["reference", "organization_name", "contact_name",
+                     "email", "subject", "procurement_reference"]
+    ordering_fields = ["created_at", "status", "request_type"]
+    throttle_classes = [PartnershipRequestThrottle]
+
+    @property
+    def view_name(self):
+        return "partnerships"
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return PartnershipRequestCreateSerializer
+        return PartnershipRequestStaffSerializer
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [AllowAny()]
+        return [RolePermission(), ReadOnlyRoles()]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        import uuid
+        ref = "PHG-" + uuid.uuid4().hex[:8].upper()
+        instance = serializer.save(reference=ref,
+                                  status=PartnershipRequestStatus.NEW)
+        # Ensure attachments from multipart are persisted (serializer handles
+        # validation when present in request.FILES).
+        out = PartnershipRequestPublicSerializer(instance).data
+        return Response(out, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"],
+            url_path="attachments/(?P<attachment_id>[^/.]+)/download")
+    def download_attachment(self, request, pk=None, attachment_id=None):
+        from django.http import FileResponse
+        from django.shortcuts import get_object_or_404
+        obj = self.get_object()
+        att = get_object_or_404(
+            PartnershipAttachment, pk=attachment_id, request=obj)
+        return FileResponse(
+            att.file.open("rb"), as_attachment=True,
+            filename=att.original_name)

@@ -34,6 +34,8 @@ VIEW_ROLES = {
     "notifications": None,  # every authenticated user sees their own
     "audit": {Role.ADMIN, Role.GM, Role.FINANCE},
     "users": {Role.ADMIN, Role.GM},
+    "partnerships": {Role.ADMIN, Role.GM, Role.SALES, Role.PROJECTS},
+
     "settings": None,  # every authenticated user
 }
 

@@ -663,3 +663,107 @@ class CodeSequence(models.Model):
 
     def __str__(self):
         return f"{self.prefix}-{self.value} (w={self.width})"
+# ---------------------------------------------------------------------------
+# Partnership / contract / procurement / quotation requests (public)
+# ---------------------------------------------------------------------------
+class PartnershipRequestStatus(models.TextChoices):
+    NEW = "New", "New"
+    IN_REVIEW = "In review", "In review"
+    CONTACTED = "Contacted", "Contacted"
+    QUOTATION_SENT = "Quotation sent", "Quotation sent"
+    ACCEPTED = "Accepted", "Accepted"
+    DECLINED = "Declined", "Declined"
+    CLOSED = "Closed", "Closed"
+
+
+class PartnershipRequestType(models.TextChoices):
+    PARTNERSHIP = "partnership", "Partnership proposal"
+    PROCUREMENT = "procurement", "Contract or procurement opportunity"
+    QUOTATION = "quotation", "Request for quotation or services"
+    NGO = "ngo", "NGO / development project collaboration"
+    GENERAL = "general", "General business inquiry"
+
+
+class OrganizationSector(models.TextChoices):
+    GOVERNMENT = "government", "Government / public institution"
+    NGO = "ngo", "NGO / development organization"
+    PRIVATE = "private", "Private sector"
+    OTHER = "other", "Other"
+
+
+def partnership_attachment_upload_to(instance, filename):
+    import os
+    import uuid
+    ext = os.path.splitext(filename)[1].lower()
+    safe = uuid.uuid4().hex
+    ref = getattr(instance.request, "reference", "request") or "request"
+    return f"partnership_requests/{ref}/{safe}{ext}"
+
+
+class PartnershipRequest(models.Model):
+    """Public submission for partnership, contract, procurement, quotation,
+    NGO collaboration or general business inquiry."""
+
+    reference = models.CharField(max_length=24, unique=True, db_index=True)
+    request_type = models.CharField(
+        max_length=20, choices=PartnershipRequestType.choices,
+        default=PartnershipRequestType.GENERAL,
+    )
+    sector = models.CharField(
+        max_length=20, choices=OrganizationSector.choices,
+        default=OrganizationSector.OTHER,
+    )
+    organization_name = models.CharField(max_length=200)
+    contact_name = models.CharField(max_length=120)
+    contact_role = models.CharField(max_length=120, blank=True)
+    email = models.EmailField()
+    phone = models.CharField(max_length=30, blank=True)
+    country = models.CharField(max_length=80, blank=True)
+    location = models.CharField(max_length=200, blank=True)
+    subject = models.CharField(max_length=200)
+    requirements = models.TextField()
+    deliverables = models.TextField(blank=True)
+    timeline = models.CharField(max_length=120, blank=True)
+    budget = models.CharField(max_length=120, blank=True)
+    procurement_reference = models.CharField(max_length=120, blank=True)
+    privacy_acknowledged = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=20, choices=PartnershipRequestStatus.choices,
+        default=PartnershipRequestStatus.NEW, db_index=True,
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="assigned_partnership_requests",
+    )
+    internal_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["reference"]),
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["request_type", "sector"]),
+        ]
+
+    def __str__(self):
+        return f"{self.reference} — {self.organization_name}"
+
+
+class PartnershipAttachment(models.Model):
+    request = models.ForeignKey(
+        PartnershipRequest, on_delete=models.CASCADE,
+        related_name="attachments",
+    )
+    file = models.FileField(upload_to=partnership_attachment_upload_to)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=120, blank=True)
+    size = models.PositiveIntegerField(default=0)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["uploaded_at"]
+
+    def __str__(self):
+        return f"{self.original_name} ({self.request.reference})"
