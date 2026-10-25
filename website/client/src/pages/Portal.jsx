@@ -68,16 +68,21 @@ export const Portal = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     const form = e.target;
-    const username = form.username.value.trim();
+    const identifier = form.username.value.trim();
+    const isEmail = identifier.includes("@");
     const password = form.password.value;
-    if (!username || !password) {
+    if (!identifier || !password) {
       setError('Username and password are required.');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      const result = await api.login({ username, password });
+      const result = await api.login({
+        email: isEmail ? identifier : "",
+        username: isEmail ? "" : identifier,
+        password,
+      });
       let me = null;
       try { me = await api.me(); } catch (e) {}
       if (me) hydrate(me);
@@ -100,6 +105,49 @@ export const Portal = () => {
     setRole(null);
     setAllowedViews(null);
     setData(null);
+  };
+
+  const fmtETB = (n) => {
+    const value = Number(n);
+    if (!Number.isFinite(value)) return 'ETB 0';
+    return 'ETB ' + value.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  };
+
+  const fmtCount = (n) => {
+    const value = Number(n);
+    return Number.isFinite(value) ? value.toLocaleString('en-US') : '0';
+  };
+
+  const fmtPct = (n) => {
+    const value = Number(n);
+    return Number.isFinite(value) ? value.toFixed(1) + '%' : '0%';
+  };
+
+  const kpiCard = ({ label, value, variant = 'default' }) => {
+    const accent = {
+      default: '#1f5fa8',
+      success: '#12a594',
+      warning: '#d97706',
+      danger: '#c0392b',
+    }[variant];
+    return (
+      <div
+        key={label}
+        style={{
+          background: '#fff',
+          border: '1px solid var(--border)',
+          borderTop: '3px solid ' + accent,
+          borderRadius: '8px',
+          padding: '1rem 1rem 0.75rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.35rem',
+        }}
+      >
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+        <div style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--navy-900)', lineHeight: '1.2' }}>{value}</div>
+      </div>
+    );
   };
 
   if (!loggedIn) {
@@ -222,13 +270,56 @@ export const Portal = () => {
               <p style={{color: 'var(--text-muted)', marginBottom: '1.5rem'}}>Welcome to the Prime Horizon Group management portal. Select a section from the sidebar to view portal data.</p>
               {user && <p style={{marginBottom: '1rem'}}>Signed in as <strong>{user.email || user.username}</strong> ({role || 'user'}).</p>}
               {data && typeof data === 'object' && !Array.isArray(data) && (
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem'}}>
-                  {Object.entries(data).map(([k, v]) => (
-                    <div key={k} style={{background: '#fff', border: '1px solid var(--border)', borderRadius: '8px', padding: '1rem'}}>
-                      <div style={{fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'capitalize'}}>{k}</div>
-                      <pre style={{margin: '0.5rem 0 0', fontSize: '0.85rem', whiteSpace: 'pre-wrap'}}>{JSON.stringify(v, null, 1)}</pre>
+                <div style={{marginTop: '1rem'}}>
+                  {Object.keys(data).length === 0 ? (
+                    <div style={{padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', background: '#fff', border: '1px solid var(--border)', borderRadius: '8px'}}>
+                      No overview data is available for your role.
                     </div>
-                  ))}
+                  ) : (
+                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem'}}>
+                      {data.capital && (
+                        <section style={{display: 'contents'}}>
+                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Capital</h3>
+                          <kpiCard label="Total shares" value={fmtCount(data.capital.total_shares)} />
+                          <kpiCard label="Committed capital" value={fmtETB(data.capital.committed)} />
+                          <kpiCard label="Paid-in capital" value={fmtETB(data.capital.received)} variant="success" />
+                          <kpiCard label="Outstanding" value={fmtETB(data.capital.outstanding)} variant="warning" />
+                          <kpiCard label="Collection" value={fmtPct(data.capital.collection_pct)} />
+                        </section>
+                      )}
+                      {data.finance && (
+                        <section style={{display: 'contents'}}>
+                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Finance</h3>
+                          <kpiCard label="Income" value={fmtETB(data.finance.income)} variant="success" />
+                          <kpiCard label="Expenses" value={fmtETB(data.finance.expenses)} variant="danger" />
+                          <kpiCard label="Net result" value={fmtETB(data.finance.result)} variant={Number(data.finance.result) >= 0 ? 'success' : 'danger'} />
+                        </section>
+                      )}
+                      {data.fleet && (
+                        <section style={{display: 'contents'}}>
+                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Fleet</h3>
+                          <kpiCard label="Total vehicles" value={fmtCount(data.fleet.total)} />
+                          <kpiCard label="Available" value={fmtCount(data.fleet.available)} variant="success" />
+                          <kpiCard label="On trip" value={fmtCount(data.fleet.on_trip)} />
+                          <kpiCard label="In maintenance" value={fmtCount(data.fleet.maintenance)} variant="warning" />
+                        </section>
+                      )}
+                      {data.projects && (
+                        <section style={{display: 'contents'}}>
+                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Projects</h3>
+                          <kpiCard label="Total projects" value={fmtCount(data.projects.total)} />
+                          <kpiCard label="Active" value={fmtCount(data.projects.active)} variant="success" />
+                        </section>
+                      )}
+                      {data.pending && (
+                        <section style={{display: 'contents'}}>
+                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Pending approvals</h3>
+                          <kpiCard label="Contributions" value={fmtCount(data.pending.contributions)} />
+                          <kpiCard label="Transactions" value={fmtCount(data.pending.transactions)} />
+                        </section>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
