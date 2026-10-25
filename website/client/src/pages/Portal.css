@@ -207,7 +207,7 @@
   padding: 0 14px;
   border: 1.5px solid var(--portal-border);
   border-radius: 10px;
-  font-size: 0.95rem;
+  font-size: 16px;
   font-family: var(--portal-font);
   color: var(--portal-text);
   background: #ffffff;

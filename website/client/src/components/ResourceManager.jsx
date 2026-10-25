@@ -379,7 +379,7 @@ export function ResourceManager({ view, role }) {
   };
 
   const renderField = (f) => {
-    const common = { value: form[f.name] ?? '', onChange: (e) => setForm((prev) => ({ ...prev, [f.name]: e.target.value })), style: { width: '100%', padding: '8px', border: '1px solid var(--border)', borderRadius: '6px' }, required: !!f.required };
+    const common = { value: form[f.name] ?? '', onChange: (e) => setForm((prev) => ({ ...prev, [f.name]: e.target.value })), className: 'portal-field-control', required: !!f.required };
     if (f.type === 'select') return (<select {...common}><option value="">—</option>{(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}</select>);
     if (f.type === 'textarea') return <textarea {...common} rows={3} />;
     return <input type={f.type === 'number' ? 'number' : f.type === 'password' ? 'password' : f.type === 'email' ? 'email' : f.type === 'date' ? 'date' : 'text'} {...common} />;
@@ -388,20 +388,23 @@ export function ResourceManager({ view, role }) {
   const labelFor = (key) => key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
-        <h2 style={{ color: 'var(--navy-900)', margin: 0 }}>{config.title}</h2>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <input placeholder="Search…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setSearch(searchInput); setPage(1); } }} style={{ padding: '8px', border: '1px solid var(--border)', borderRadius: '6px' }} />
-          <button onClick={() => { setSearch(searchInput); setPage(1); }} style={{ padding: '8px 12px' }}>Search</button>
-          {config.canCreate && canMutate && (<button onClick={openCreate} style={{ padding: '8px 12px', background: 'var(--navy-900)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>New</button>)}
+    <div className="portal-resource">
+      <div className="portal-resource-header">
+        <div>
+          <h2 className="portal-resource-title">{config.title}</h2>
+          <p className="portal-resource-sub">Manage {config.title.toLowerCase()} records.</p>
+        </div>
+        <div className="portal-toolbar">
+          <input className="portal-input" placeholder="Search…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { setSearch(searchInput); setPage(1); } }} />
+          <button className="portal-btn portal-btn-secondary" onClick={() => { setSearch(searchInput); setPage(1); }}>Search</button>
+          {config.canCreate && canMutate && (<button className="portal-btn portal-btn-primary" onClick={openCreate}>New</button>)}
         </div>
       </div>
 
       {config.fields.filter((f) => f.type === 'select').length > 0 && (
-        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <div className="portal-filter-row">
           {config.fields.filter((f) => f.type === 'select').map((f) => (
-            <select key={f.name} value={filters[f.name] || ''} onChange={(e) => { setFilters((prev) => ({ ...prev, [f.name]: e.target.value })); setPage(1); }} style={{ padding: '8px', border: '1px solid var(--border)', borderRadius: '6px' }}>
+            <select key={f.name} className="portal-select" value={filters[f.name] || ''} onChange={(e) => { setFilters((prev) => ({ ...prev, [f.name]: e.target.value })); setPage(1); }}>
               <option value="">{f.label} (all)</option>
               {(f.options || []).map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -409,32 +412,32 @@ export function ResourceManager({ view, role }) {
         </div>
       )}
 
-      {loading && <p style={{ color: 'var(--text-muted)' }}>Loading…</p>}
-      {error && <div style={{ color: '#c0392b', marginBottom: '1rem' }}>{error}</div>}
+      {loading && <p className="portal-state portal-state-loading">Loading…</p>}
+      {error && <div className="portal-state portal-state-error">{error}</div>}
 
       {!loading && !error && (
         <>
           {rows.length === 0 ? (
-            <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', background: '#fff', border: '1px solid var(--border)', borderRadius: '8px' }}>
-              <div style={{ fontSize: '1.05rem', fontWeight: '600', marginBottom: '0.25rem' }}>No {config.title.toLowerCase()} records found.</div>
-              <div style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>There are no {config.title.toLowerCase()} to display.</div>
+            <div className="portal-empty">
+              <div className="portal-empty-title">No {config.title.toLowerCase()} records found.</div>
+              <div className="portal-empty-text">There are no {config.title.toLowerCase()} to display.</div>
               {canMutate && (
-                <button onClick={openCreate} style={{ padding: '8px 14px', background: 'var(--navy-900)', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Add new</button>
+                <button className="portal-btn portal-btn-primary" onClick={openCreate}>Add new</button>
               )}
             </div>
           ) : (
-            <div style={{ overflowX: 'auto', background: '#fff', border: '1px solid var(--border)', borderRadius: '8px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <div className="portal-table-wrap">
+              <table className="portal-table">
                 <thead>
                   <tr>
-                    {(config.columns || []).map((c) => (<th key={c} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>{labelFor(c)}</th>))}
-                    {(config.canUpdate || config.canDelete) && canMutate && (<th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>Actions</th>)}
+                    {(config.columns || []).map((c) => (<th key={c}>{labelFor(c)}</th>))}
+                    {(config.canUpdate || config.canDelete) && canMutate && (<th>Actions</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, i) => (
                     <tr key={row.id || row.reference || i}>
-                      {(config.columns || []).map((c) => (<td key={c} style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{String(row[c] ?? '')}</td>))}
+                      {(config.columns || []).map((c) => (<td key={c}>{String(row[c] ?? '')}</td>))}
                       {(config.canUpdate || config.canDelete) && canMutate && (
                         <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
                           {config.canUpdate && <button onClick={() => openEdit(row)} style={{ marginRight: '6px' }}>Edit</button>}
@@ -450,19 +453,19 @@ export function ResourceManager({ view, role }) {
         </>
       )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
-        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{count} record(s)</span>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
-          <span style={{ padding: '0 8px' }}>Page {page}</span>
-          <button onClick={() => setPage((p) => p + 1)}>Next</button>
+      <div className="portal-pagination">
+        <span>{count} record(s)</span>
+        <div className="portal-pagination-actions">
+          <button className="portal-btn portal-btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
+          <span className="portal-page-indicator">Page {page}</span>
+          <button className="portal-btn portal-btn-secondary" onClick={() => setPage((p) => p + 1)}>Next</button>
         </div>
       </div>
 
       {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '8px', padding: '1.5rem', width: 'min(640px, 95vw)', maxHeight: '90vh', overflowY: 'auto' }}>
-            <h3 style={{ marginTop: 0 }}>{modal.mode === 'create' ? 'Create' : 'Edit'} {config.title}</h3>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ background: '#fff', borderRadius: '8px', padding: '1.5rem', width: 'min(640px, 100%)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 className="portal-modal-title">{modal.mode === 'create' ? 'Create' : 'Edit'} {config.title}</h3>
             {formError && <pre style={{ color: '#c0392b', whiteSpace: 'pre-wrap', fontSize: '0.85rem' }}>{formError}</pre>}
             <form onSubmit={submitForm}>
               {(config.fields || []).map((f) => (
@@ -481,8 +484,8 @@ export function ResourceManager({ view, role }) {
       )}
 
       {deleteTarget && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '8px', padding: '1.5rem', width: 'min(480px, 95vw)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ background: '#fff', borderRadius: '8px', padding: '1.5rem', width: 'min(480px, 100%)' }}>
             <h3 style={{ marginTop: 0 }}>{view === 'users' ? 'Deactivate user?' : 'Delete record?'}</h3>
             <p style={{ color: 'var(--text-muted)' }}>{view === 'users' ? 'This disables login but keeps the account record. Confirm deactivation of ' + (deleteTarget.id || deleteTarget.reference) + '.' : 'This action may be irreversible. Confirm deletion of ' + (deleteTarget.id || deleteTarget.reference) + '.'}</p>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>

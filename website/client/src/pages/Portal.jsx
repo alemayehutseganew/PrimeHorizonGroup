@@ -2,7 +2,17 @@ import React, {useState, useEffect} from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api, clearTokens } from '../api/client';
 import './Portal.css';
+import '../portal-dashboard.css';
 import { ResourceManager, RESOURCE_CONFIG } from '../components/ResourceManager';
+
+const NAV_GROUPS = [
+  { label: 'Overview', keys: ['dashboard'] },
+  { label: 'People', keys: ['shareholders', 'customers', 'leads', 'inquiries', 'users'] },
+  { label: 'Capital & finance', keys: ['contributions', 'transactions', 'invoices', 'payments'] },
+  { label: 'Fleet & transport', keys: ['vehicles', 'drivers', 'trips', 'maintenance'] },
+  { label: 'Projects & work', keys: ['projects', 'tasks'] },
+  { label: 'Governance & records', keys: ['meetings', 'documents', 'notifications', 'audit'] },
+];
 
 export const Portal = () => {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -16,6 +26,7 @@ export const Portal = () => {
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -76,6 +87,18 @@ export const Portal = () => {
     if (RESOURCE_CONFIG[seg] && canView(seg)) setView(seg);
     else setView('dashboard');
   }, [location.pathname, loggedIn, allowedViews]);
+
+  // Close the mobile nav after navigation and on desktop resize.
+  useEffect(() => { setMobileNavOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    const onResize = () => { if (window.innerWidth > 900) setMobileNavOpen(false); };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  useEffect(() => {
+    document.body.classList.toggle('portal-nav-open', mobileNavOpen);
+    return () => document.body.classList.remove('portal-nav-open');
+  }, [mobileNavOpen]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -138,29 +161,22 @@ export const Portal = () => {
     return Number.isFinite(value) ? value.toFixed(1) + '%' : '\u2014';
   };
 
-  const KpiCard = ({ label, value, variant = 'default' }) => {
+  const KpiCard = ({ label, value, variant = 'default', progress = null }) => {
     const accent = {
-      default: '#1f5fa8',
-      success: '#12a594',
-      warning: '#d97706',
-      danger: '#c0392b',
+      default: 'var(--blue-600)',
+      success: 'var(--teal-500)',
+      warning: 'var(--amber-500)',
+      danger: 'var(--red-500)',
     }[variant];
     return (
-      <div
-        key={label}
-        style={{
-          background: '#fff',
-          border: '1px solid var(--border)',
-          borderTop: '3px solid ' + accent,
-          borderRadius: '8px',
-          padding: '1rem 1rem 0.75rem',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '0.35rem',
-        }}
-      >
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-        <div style={{ fontSize: '1.4rem', fontWeight: '700', color: 'var(--navy-900)', lineHeight: '1.2' }}>{value}</div>
+      <div className="portal-kpi-card" style={{ borderTopColor: accent }}>
+        <div className="portal-kpi-label">{label}</div>
+        <div className="portal-kpi-value">{value}</div>
+        {progress !== null && Number.isFinite(Number(progress)) && (
+          <div className="portal-kpi-progress">
+            <div className="portal-kpi-progress-bar" style={{ width: Math.max(0, Math.min(100, Number(progress))) + '%' }} />
+          </div>
+        )}
       </div>
     );
   };
@@ -233,7 +249,10 @@ export const Portal = () => {
 
   return (
     <div className="portal-shell">
-      <aside className="portal-sidebar">
+      {mobileNavOpen && (
+        <div className="portal-sidebar-backdrop open" onClick={() => setMobileNavOpen(false)} aria-hidden="true" />
+      )}
+      <aside id="portal-sidebar" className={`portal-sidebar${mobileNavOpen ? ' open' : ''}`} aria-label="Portal navigation">
         <div className="brand-mark" style={{width: '40px', height: '40px', borderRadius: '10px', background: 'linear-gradient(135deg, var(--navy-800), var(--blue-600))', display: 'grid', placeItems: 'center', marginBottom: '24px'}}>
           <svg width="22" height="22" viewBox="0 0 44 44" fill="none" aria-hidden="true">
             <path d="M10 30 L22 12 L34 30" stroke="#ffffff" strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
@@ -241,17 +260,32 @@ export const Portal = () => {
           </svg>
         </div>
         <h3 style={{color: 'var(--teal-500)', marginBottom: '24px'}}>Prime Horizon Portal</h3>
-        <nav>
-          <ul style={{lineHeight: '1.8', paddingLeft: 0, margin: 0, listStyle: 'none'}}>
-            <li style={{margin: '8px 0'}}><Link to="/portal" onClick={() => setView('dashboard')} className={view === 'dashboard' ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}><span style={{marginRight: '10px', color: 'var(--teal-500)'}}>▦</span>Overview</Link></li>
-            {Object.keys(RESOURCE_CONFIG).map((key) => canView(key) && (
-              <li key={key} style={{margin: '8px 0'}}>
-                <Link to={"/portal/" + key} onClick={() => setView(key)} className={view === key ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>
-                  <span style={{marginRight: '10px', color: 'var(--teal-500)'}}>•</span>{RESOURCE_CONFIG[key].title}
-                </Link>
-              </li>
-            ))}
-          </ul>
+        <nav aria-label="Portal sections">
+          {NAV_GROUPS.map((group) => {
+            const items = group.keys.filter((key) => key === 'dashboard' ? true : (RESOURCE_CONFIG[key] && canView(key)));
+            if (!items.length) return null;
+            return (
+              <div key={group.label} className="portal-nav-group">
+                <div className="portal-nav-label">{group.label}</div>
+                <ul className="portal-nav-list">
+                  {items.map((key) => {
+                    const title = key === 'dashboard' ? 'Overview' : RESOURCE_CONFIG[key].title;
+                    return (
+                      <li key={key}>
+                        <Link
+                          to={key === 'dashboard' ? '/portal' : `/portal/${key}`}
+                          onClick={() => { setView(key); setMobileNavOpen(false); }}
+                          className={`portal-nav-link${view === key ? ' active' : ''}`}
+                        >
+                          {title}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
         </nav>
         <div style={{marginTop: 'auto', paddingTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
           <button onClick={handleLogout} style={{background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.9rem', width: '100%'}}>
@@ -262,24 +296,38 @@ export const Portal = () => {
 
       <main className="portal-main">
         <header className="portal-topbar">
-          <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-            <h2 id="topbarTitle" style={{margin: 0, color: 'var(--navy-800)'}}>{view === 'dashboard' ? 'Overview' : view === 'shareholders' ? 'Shareholders' : view === 'contributions' ? 'Capital Contributions' : view === 'projects' ? 'Projects' : 'Documents'}</h2>
-            <div className="pt-sub" id="topbarSub" style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>—</div>
+          <button type="button" className="sidebar-toggle" aria-label="Toggle navigation" aria-expanded={mobileNavOpen} aria-controls="portal-sidebar" onClick={() => setMobileNavOpen((o) => !o)}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div className="portal-topbar-title">
+            <h2>{view === 'dashboard' ? 'Overview' : (RESOURCE_CONFIG[view]?.title || 'Overview')}</h2>
+            <div className="portal-topbar-sub">
+              {view === 'dashboard'
+                ? 'Executive summary of capital, finance, fleet, projects, and pending approvals.'
+                : `Manage ${RESOURCE_CONFIG[view]?.title?.toLowerCase() || 'records'} records, search, filter, and update.`}
+            </div>
           </div>
-          <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto'}}>
-            <button className="pt-btn" id="btnRefresh" title="Refresh" onClick={() => setRefreshKey((k) => k + 1)} style={{padding: '6px 12px', border: '1px solid var(--border)', borderRadius: '8px', background: '#fff', color: 'var(--navy-800)', cursor: 'pointer', fontSize: '0.85rem'}}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6" /><path d="M23 20v-6h-6" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
-            </button>
-            <button onClick={handleLogout} style={{background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.85rem', marginLeft: '8px'}}>
-              Sign out
-            </button>
+          <div className="portal-topbar-actions">
+            {view === 'dashboard' && (
+              <button className="portal-icon-button" title="Refresh" onClick={() => setRefreshKey((k) => k + 1)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6" /><path d="M23 20v-6h-6" /><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" /></svg>
+              </button>
+            )}
+            <div className="portal-user-pill">
+              <span className="portal-user-name">{user?.name || user?.username || user?.email || 'Signed in'}</span>
+              {role && <span className="portal-user-role">{role}</span>}
+            </div>
+            <button className="portal-signout-button" onClick={handleLogout}>Sign out</button>
           </div>
         </header>
 
         <div id="portalContent" style={{padding: '2rem'}}>
-          {dataLoading && <p style={{color: 'var(--text-muted)'}}>Loading…</p>}
-          {dataError && <div style={{color: '#c0392b', marginBottom: '1rem'}}>{dataError}</div>}
-          {!dataLoading && !dataError && view === 'dashboard' && (
+          {dataLoading && <p className="portal-state portal-state-loading">Loading summary…</p>}
+          {dataError && <div className="portal-state portal-state-error">{dataError}</div>}
+          {!dataLoading && !dataError && view === 'dashboard' && !data && (
+          <div className="portal-empty">No summary data is available for your account.</div>
+        )}
+        {!dataLoading && !dataError && view === 'dashboard' && data && (
             <div>
               <h2 style={{color: 'var(--navy-900)', marginBottom: '1rem'}}>Overview</h2>
               <p style={{color: 'var(--text-muted)', marginBottom: '1.5rem'}}>Welcome to the Prime Horizon Group management portal. Select a section from the sidebar to view portal data.</p>
@@ -291,20 +339,20 @@ export const Portal = () => {
                       No overview data is available for your role.
                     </div>
                   ) : (
-                    <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem'}}>
+                    <div className="portal-kpi-grid">
                       {data.capital && (
                         <section style={{display: 'contents'}}>
-                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Capital</h3>
+                          <h3 className="portal-kpi-section-title">Capital</h3>
                           <KpiCard label="Total shares" value={fmtCount(data.capital.total_shares)} />
                           <KpiCard label="Committed capital" value={fmtETB(data.capital.committed)} />
                           <KpiCard label="Paid-in capital" value={fmtETB(data.capital.received)} variant="success" />
                           <KpiCard label="Outstanding" value={fmtETB(data.capital.outstanding)} variant="warning" />
-                          <KpiCard label="Collection" value={fmtPct(data.capital.collection_pct)} />
+                          <KpiCard label="Collection" value={fmtPct(data.capital.collection_pct)} progress={data.capital.collection_pct} />
                         </section>
                       )}
                       {data.finance && (
                         <section style={{display: 'contents'}}>
-                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Finance</h3>
+                          <h3 className="portal-kpi-section-title">Finance</h3>
                           <KpiCard label="Income" value={fmtETB(data.finance.income)} variant="success" />
                           <KpiCard label="Expenses" value={fmtETB(data.finance.expenses)} variant="danger" />
                           <KpiCard label="Net result" value={fmtETB(data.finance.result)} variant={Number(data.finance.result) >= 0 ? 'success' : 'danger'} />
@@ -312,7 +360,7 @@ export const Portal = () => {
                       )}
                       {data.fleet && (
                         <section style={{display: 'contents'}}>
-                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Fleet</h3>
+                          <h3 className="portal-kpi-section-title">Fleet</h3>
                           <KpiCard label="Total vehicles" value={fmtCount(data.fleet.total)} />
                           <KpiCard label="Available" value={fmtCount(data.fleet.available)} variant="success" />
                           <KpiCard label="On trip" value={fmtCount(data.fleet.on_trip)} />
@@ -321,14 +369,14 @@ export const Portal = () => {
                       )}
                       {data.projects && (
                         <section style={{display: 'contents'}}>
-                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Projects</h3>
+                          <h3 className="portal-kpi-section-title">Projects</h3>
                           <KpiCard label="Total projects" value={fmtCount(data.projects.total)} />
                           <KpiCard label="Active" value={fmtCount(data.projects.active)} variant="success" />
                         </section>
                       )}
                       {data.pending && (
                         <section style={{display: 'contents'}}>
-                          <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Pending approvals</h3>
+                          <h3 className="portal-kpi-section-title">Pending approvals</h3>
                           <KpiCard label="Contributions" value={fmtCount(data.pending.contributions)} />
                           <KpiCard label="Transactions" value={fmtCount(data.pending.transactions)} />
                         </section>
