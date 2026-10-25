@@ -1,5 +1,5 @@
 import React, {useState, useEffect} from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { api, clearTokens } from '../api/client';
 import './Portal.css';
 import { ResourceManager, RESOURCE_CONFIG } from '../components/ResourceManager';
@@ -17,6 +17,7 @@ export const Portal = () => {
   const [dataError, setDataError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const canView = (name) => {
     if (name === 'dashboard') return true;
@@ -65,6 +66,17 @@ export const Portal = () => {
     return () => { cancelled = true; };
   }, [loggedIn, view, allowedViews, refreshKey]);
 
+  // Keep the active view in sync with the URL so resource sections render
+  // instead of unmounting the portal on navigation.
+  useEffect(() => {
+    if (!loggedIn) return;
+    const parts = location.pathname.split('/').filter(Boolean);
+    const seg = parts.length > 1 ? parts[1] : 'dashboard';
+    if (seg === 'dashboard') { setView('dashboard'); return; }
+    if (RESOURCE_CONFIG[seg] && canView(seg)) setView(seg);
+    else setView('dashboard');
+  }, [location.pathname, loggedIn, allowedViews]);
+
   const handleLogin = async (e) => {
     e.preventDefault();
     const form = e.target;
@@ -108,22 +120,25 @@ export const Portal = () => {
   };
 
   const fmtETB = (n) => {
+    if (n === null || n === undefined) return '\u2014';
     const value = Number(n);
-    if (!Number.isFinite(value)) return 'ETB 0';
+    if (!Number.isFinite(value)) return '\u2014';
     return 'ETB ' + value.toLocaleString('en-US', { maximumFractionDigits: 0 });
   };
 
   const fmtCount = (n) => {
+    if (n === null || n === undefined) return '\u2014';
     const value = Number(n);
-    return Number.isFinite(value) ? value.toLocaleString('en-US') : '0';
+    return Number.isFinite(value) ? value.toLocaleString('en-US') : '\u2014';
   };
 
   const fmtPct = (n) => {
+    if (n === null || n === undefined) return '\u2014';
     const value = Number(n);
-    return Number.isFinite(value) ? value.toFixed(1) + '%' : '0%';
+    return Number.isFinite(value) ? value.toFixed(1) + '%' : '\u2014';
   };
 
-  const kpiCard = ({ label, value, variant = 'default' }) => {
+  const KpiCard = ({ label, value, variant = 'default' }) => {
     const accent = {
       default: '#1f5fa8',
       success: '#12a594',
@@ -280,42 +295,42 @@ export const Portal = () => {
                       {data.capital && (
                         <section style={{display: 'contents'}}>
                           <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Capital</h3>
-                          <kpiCard label="Total shares" value={fmtCount(data.capital.total_shares)} />
-                          <kpiCard label="Committed capital" value={fmtETB(data.capital.committed)} />
-                          <kpiCard label="Paid-in capital" value={fmtETB(data.capital.received)} variant="success" />
-                          <kpiCard label="Outstanding" value={fmtETB(data.capital.outstanding)} variant="warning" />
-                          <kpiCard label="Collection" value={fmtPct(data.capital.collection_pct)} />
+                          <KpiCard label="Total shares" value={fmtCount(data.capital.total_shares)} />
+                          <KpiCard label="Committed capital" value={fmtETB(data.capital.committed)} />
+                          <KpiCard label="Paid-in capital" value={fmtETB(data.capital.received)} variant="success" />
+                          <KpiCard label="Outstanding" value={fmtETB(data.capital.outstanding)} variant="warning" />
+                          <KpiCard label="Collection" value={fmtPct(data.capital.collection_pct)} />
                         </section>
                       )}
                       {data.finance && (
                         <section style={{display: 'contents'}}>
                           <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Finance</h3>
-                          <kpiCard label="Income" value={fmtETB(data.finance.income)} variant="success" />
-                          <kpiCard label="Expenses" value={fmtETB(data.finance.expenses)} variant="danger" />
-                          <kpiCard label="Net result" value={fmtETB(data.finance.result)} variant={Number(data.finance.result) >= 0 ? 'success' : 'danger'} />
+                          <KpiCard label="Income" value={fmtETB(data.finance.income)} variant="success" />
+                          <KpiCard label="Expenses" value={fmtETB(data.finance.expenses)} variant="danger" />
+                          <KpiCard label="Net result" value={fmtETB(data.finance.result)} variant={Number(data.finance.result) >= 0 ? 'success' : 'danger'} />
                         </section>
                       )}
                       {data.fleet && (
                         <section style={{display: 'contents'}}>
                           <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Fleet</h3>
-                          <kpiCard label="Total vehicles" value={fmtCount(data.fleet.total)} />
-                          <kpiCard label="Available" value={fmtCount(data.fleet.available)} variant="success" />
-                          <kpiCard label="On trip" value={fmtCount(data.fleet.on_trip)} />
-                          <kpiCard label="In maintenance" value={fmtCount(data.fleet.maintenance)} variant="warning" />
+                          <KpiCard label="Total vehicles" value={fmtCount(data.fleet.total)} />
+                          <KpiCard label="Available" value={fmtCount(data.fleet.available)} variant="success" />
+                          <KpiCard label="On trip" value={fmtCount(data.fleet.on_trip)} />
+                          <KpiCard label="In maintenance" value={fmtCount(data.fleet.maintenance)} variant="warning" />
                         </section>
                       )}
                       {data.projects && (
                         <section style={{display: 'contents'}}>
                           <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Projects</h3>
-                          <kpiCard label="Total projects" value={fmtCount(data.projects.total)} />
-                          <kpiCard label="Active" value={fmtCount(data.projects.active)} variant="success" />
+                          <KpiCard label="Total projects" value={fmtCount(data.projects.total)} />
+                          <KpiCard label="Active" value={fmtCount(data.projects.active)} variant="success" />
                         </section>
                       )}
                       {data.pending && (
                         <section style={{display: 'contents'}}>
                           <h3 style={{gridColumn: '1 / -1', fontSize: '0.9rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem'}}>Pending approvals</h3>
-                          <kpiCard label="Contributions" value={fmtCount(data.pending.contributions)} />
-                          <kpiCard label="Transactions" value={fmtCount(data.pending.transactions)} />
+                          <KpiCard label="Contributions" value={fmtCount(data.pending.contributions)} />
+                          <KpiCard label="Transactions" value={fmtCount(data.pending.transactions)} />
                         </section>
                       )}
                     </div>

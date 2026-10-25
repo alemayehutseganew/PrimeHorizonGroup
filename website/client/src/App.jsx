@@ -89,7 +89,7 @@ export default function App() {
           <Route path='auth/login' element={<div className='container section'><h2>Login</h2><p>Use the portal at /portal to log in.</p></div>} />
           <Route path='auth/logout' element={<Navigate to='/' replace />} />
         </Route>
-        <Route path='portal' element={<Portal />} />
+        <Route path='portal/*' element={<Portal />} />
       </Routes>
     </Router>
   );
