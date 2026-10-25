@@ -406,11 +406,41 @@ class DocumentViewSet(BaseViewSet):
     code_prefix = ("DOC", 2)
     filterset_fields = ["category"]
     search_fields = ["code", "name"]
+
+    def perform_create(self, serializer):
+        code = next_code(Document, *self.code_prefix)
+        serializer.save(code=code, uploaded_by=actor_name(self.request.user))
+
 class NotificationViewSet(viewsets.ModelViewSet):
-    """Users see and manage their own notifications."""
+    """Notifications.
+
+    Privacy policy (intentional administrative oversight):
+      * Admin and GM may list/retrieve ALL notifications, including private
+        notifications belonging to other users, for oversight.
+      * All other authenticated users may list/retrieve only their own
+        notifications and explicitly broadcast (recipient-less) notifications.
+      * Object-level checks below enforce the same restriction for retrieve,
+        update and mark-read operations.
+      * Only admin/GM may create notifications; the server assigns recipient.
+      * Ordinary updates may change only ``is_read``.
+    """
     serializer_class = NotificationSerializer
     view_name = "notifications"
+    permission_classes = [RolePermission]
     http_method_names = ["get", "patch", "post", "head", "options"]
+
+    def create(self, request, *args, **kwargs):
+        if request.user.role not in {Role.ADMIN, Role.GM}:
+            return Response(
+                {"detail": "Only administrators can create notifications."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        # Recipient is server-derived from the authenticated creator; clients
+        # cannot spoof recipients or create unintended broadcasts.
+        serializer.save(recipient=self.request.user)
 
     def get_queryset(self):
         # FIX §8: scope strictly to the logged-in user (+ global broadcasts).
@@ -418,7 +448,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
         # default ModelViewSet allowed a user to PATCH/DELETE another user's
         # row by id. Writes are now blocked at object level below.
         user = self.request.user
-        if getattr(user, "role", None) in ("admin", "gm"):
+        # Admin/GM oversight: all notifications are visible to admin/GM.
+        if user.role in {Role.ADMIN, Role.GM}:
             return Notification.objects.all().order_by("-created_at")
         return Notification.objects.filter(
             models_Q(recipient__isnull=True) | models_Q(recipient=user)
@@ -427,8 +458,9 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def get_object(self):
         note = super().get_object()
         user = self.request.user
-        # Non-admins may only touch their own or broadcast rows.
-        if getattr(user, "role", None) not in ("admin", "gm"):
+        # Object-level guard: non-admin/GM users cannot retrieve, update, or
+        # mark read another user's private notification.
+        if user.role not in {Role.ADMIN, Role.GM}:
             if note.recipient_id not in (None, user.id):
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied("Not your notification.")
@@ -485,14 +517,14 @@ class UserViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only an admin can grant the admin role.")
 
     def perform_create(self, serializer):
-        self._guard_role_change(None, self.request.data)
+        self._guard_role_change(None, serializer.validated_data)
         serializer.save()
         audit(actor_name(self.request.user),
               f"Invited user {serializer.instance.email}",
               serializer.instance.email)
 
     def perform_update(self, serializer):
-        self._guard_role_change(serializer.instance, self.request.data)
+        self._guard_role_change(serializer.instance, serializer.validated_data)
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -553,7 +585,8 @@ def me(request):
     if user.is_authenticated:
         role = user.role
         status_val = user.status
-        allowed = VIEW_ROLES.get(role, [])
+        allowed = [v for v, roles in VIEW_ROLES.items()
+                   if roles is None or role in roles]
         from .serializers import UserProfileSerializer
         from django.contrib.auth import get_user_model
         User = get_user_model()
@@ -567,13 +600,6 @@ def me(request):
             'allowed_views': allowed,
         })
     return Response({'detail': 'Not authenticated'}, status=401)
-    allowed = [v for v, roles in VIEW_ROLES.items()
-               if roles is None or request.user.role in roles]
-    return Response({
-        "user": UserSerializer(request.user).data,
-        "views": allowed,
-        "share_price": __import__("django.conf", fromlist=["settings"]).settings.SHARE_PRICE_ETB,
-    })
 
 
 @api_view(["GET"])

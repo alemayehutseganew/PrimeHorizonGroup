@@ -181,11 +181,12 @@ class LeadSerializer(serializers.ModelSerializer):
 
 
 class InquirySerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(read_only=True)
     reference = serializers.CharField(read_only=True)
 
     class Meta:
         model = Inquiry
-        fields = ["reference", "name", "organization", "email", "phone",
+        fields = ["id", "reference", "name", "organization", "email", "phone",
                   "topic", "message", "status"]
         read_only_fields = ["status"]
 
@@ -261,16 +262,16 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 class TaskSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="code", read_only=True)
-    project = serializers.SerializerMethodField()
+    project = serializers.SlugRelatedField(
+        slug_field="code", queryset=Project.objects.all(),
+        required=False, allow_null=True,
+    )
     due = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = ["id", "project", "title", "assignee", "priority", "due",
                   "status"]
-
-    def get_project(self, obj):
-        return obj.project.code if obj.project else "—"
 
     def get_due(self, obj):
         return obj.due_date.isoformat() if obj.due_date else "—"
@@ -316,7 +317,7 @@ class DocumentSerializer(serializers.ModelSerializer):
     id = serializers.CharField(source="code", read_only=True)
     linked = serializers.CharField(source="linked_to")
     uploaded = serializers.SerializerMethodField()
-    by = serializers.CharField(source="uploaded_by")
+    by = serializers.CharField(source="uploaded_by", read_only=True)
     access = serializers.CharField(source="access_level")
 
     class Meta:
@@ -343,6 +344,14 @@ class NotificationSerializer(serializers.ModelSerializer):
 
     def get_unread(self, obj):
         return not obj.is_read
+
+    def update(self, instance, validated_data):
+        # Only the read/unread flag is mutable after creation. Text, target,
+        # recipient and other protected fields are ignored on update.
+        allowed = {}
+        if "is_read" in validated_data:
+            allowed["is_read"] = validated_data["is_read"]
+        return super().update(instance, allowed)
 
 
 class AuditLogSerializer(serializers.ModelSerializer):

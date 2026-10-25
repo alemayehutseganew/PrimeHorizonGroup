@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from .models import (
     Role, User, Shareholder, Contribution, ContributionStatus,
-    Vehicle, Transaction, Notification, Driver, Trip,
+    Vehicle, Transaction, Notification, Driver, Trip, Document,
 )
 
 UserModel = get_user_model()
@@ -510,3 +510,228 @@ class ExtendedRoleRestrictionTests(CRUDTestBase):
         client = auth_client_for(self.shareholder)
         r = client.delete("/api/trips/TR-0001/")
         self.assertEqual(r.status_code, 403)
+
+
+
+class DocumentSecurityTests(CRUDTestBase):
+    """Uploader attribution is server-derived and immutable via the API."""
+
+    def test_uploader_is_server_derived_on_create(self):
+        client = auth_client_for(self.gm)
+        r = client.post("/api/documents/", {
+            "name": "Policy", "category": "General",
+            "linked": "HQ", "by": "evil", "access": "Internal",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()["by"], "gm@test.et")
+        doc = Document.objects.get(code=r.json()["id"])
+        self.assertEqual(doc.uploaded_by, "gm@test.et")
+
+    def test_uploader_cannot_be_changed_on_update(self):
+        Document.objects.create(code="DOC-99", name="Policy",
+                               uploaded_by="original")
+        client = auth_client_for(self.gm)
+        r = client.patch("/api/documents/DOC-99/", {
+            "name": "Renamed", "by": "evil",
+        })
+        self.assertEqual(r.status_code, 200, r.content)
+        doc = Document.objects.get(code="DOC-99")
+        self.assertEqual(doc.uploaded_by, "original")
+        self.assertEqual(r.json()["by"], "original")
+
+
+class NotificationSecurityTests(CRUDTestBase):
+    """Notification protected fields and object-level access."""
+
+    def test_protected_fields_ignored_on_update(self):
+        note = Notification.objects.create(
+            recipient=self.gm, text="hello", target="x")
+        client = auth_client_for(self.gm)
+        r = client.patch(f"/api/notifications/{note.id}/", {
+            "text": "changed", "target": "y", "is_read": True,
+        })
+        self.assertEqual(r.status_code, 200, r.content)
+        note.refresh_from_db()
+        self.assertEqual(note.text, "hello")
+        self.assertEqual(note.target, "x")
+        self.assertTrue(note.is_read)
+        self.assertEqual(r.json()["text"], "hello")
+        self.assertEqual(r.json()["target"], "x")
+
+    def test_creation_restricted_to_admin_or_gm(self):
+        client = auth_client_for(self.finance)
+        r = client.post("/api/notifications/", {
+            "text": "hello", "target": "x",
+        })
+        self.assertEqual(r.status_code, 403, r.content)
+
+    def test_recipient_is_forced_to_creator(self):
+        client = auth_client_for(self.admin)
+        r = client.post("/api/notifications/", {
+            "text": "hello", "target": "x",
+        })
+        self.assertEqual(r.status_code, 201, r.content)
+        note = Notification.objects.get(text="hello", target="x")
+        self.assertEqual(note.recipient_id, self.admin.id)
+
+    def test_user_cannot_touch_others_notification(self):
+        other = make_user("other2@test.et", Role.SALES, username="other2")
+        me_sales = make_user("me3@test.et", Role.SALES, username="me3")
+        note = Notification.objects.create(recipient=other, text="private")
+        client = auth_client_for(me_sales)
+        r = client.patch(f"/api/notifications/{note.id}/",
+                         {"is_read": True})
+        self.assertIn(r.status_code, (403, 404))
+
+    def test_admin_can_list_and_retrieve_others_private_notification(self):
+        other = make_user("notif_admin_other@test.et", Role.SALES,
+                          username="notif_admin_other")
+        note = Notification.objects.create(recipient=other, text="admin-private")
+        client = auth_client_for(self.admin)
+        r = client.get("/api/notifications/")
+        self.assertEqual(r.status_code, 200, r.content)
+        ids = [item["id"] for item in r.json().get("results", r.json())]
+        self.assertIn(note.id, ids)
+        r = client.get(f"/api/notifications/{note.id}/")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["text"], "admin-private")
+
+    def test_gm_can_list_and_retrieve_others_private_notification(self):
+        other = make_user("notif_gm_other@test.et", Role.SALES,
+                          username="notif_gm_other")
+        note = Notification.objects.create(recipient=other, text="gm-private")
+        client = auth_client_for(self.gm)
+        r = client.get("/api/notifications/")
+        self.assertEqual(r.status_code, 200, r.content)
+        ids = [item["id"] for item in r.json().get("results", r.json())]
+        self.assertIn(note.id, ids)
+        r = client.get(f"/api/notifications/{note.id}/")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["text"], "gm-private")
+
+    def test_ordinary_user_cannot_retrieve_others_private_notification(self):
+        other = make_user("notif_plain_other@test.et", Role.SALES,
+                          username="notif_plain_other")
+        me_sales = make_user("notif_plain_me@test.et", Role.SALES,
+                             username="notif_plain_me")
+        note = Notification.objects.create(recipient=other, text="plain-private")
+        client = auth_client_for(me_sales)
+        r = client.get(f"/api/notifications/{note.id}/")
+        self.assertIn(r.status_code, (403, 404))
+
+    def test_ordinary_user_cannot_update_others_private_notification(self):
+        other = make_user("notif_upd_other@test.et", Role.SALES,
+                          username="notif_upd_other")
+        me_sales = make_user("notif_upd_me@test.et", Role.SALES,
+                             username="notif_upd_me")
+        note = Notification.objects.create(recipient=other, text="upd-private")
+        client = auth_client_for(me_sales)
+        r = client.patch(f"/api/notifications/{note.id}/",
+                         {"is_read": True})
+        self.assertIn(r.status_code, (403, 404))
+
+    def test_ordinary_user_can_access_own_and_broadcast_notifications(self):
+        me_sales = make_user("notif_access_me@test.et", Role.SALES,
+                             username="notif_access_me")
+        other = make_user("notif_access_other@test.et", Role.SALES,
+                          username="notif_access_other")
+        own = Notification.objects.create(recipient=me_sales, text="own-note")
+        broadcast = Notification.objects.create(recipient=None,
+                                               text="broadcast-note")
+        hidden = Notification.objects.create(recipient=other, text="hidden-note")
+        client = auth_client_for(me_sales)
+        r = client.get("/api/notifications/")
+        self.assertEqual(r.status_code, 200, r.content)
+        ids = [item["id"] for item in r.json().get("results", r.json())]
+        self.assertIn(own.id, ids)
+        self.assertIn(broadcast.id, ids)
+        self.assertNotIn(hidden.id, ids)
+        self.assertEqual(client.get(f"/api/notifications/{own.id}/").status_code, 200)
+        self.assertEqual(client.get(f"/api/notifications/{broadcast.id}/").status_code, 200)
+        self.assertIn(client.get(f"/api/notifications/{hidden.id}/").status_code,
+                      (403, 404))
+
+    def test_protected_fields_ignored_on_update_including_recipient(self):
+        recipient = self.gm
+        other = make_user("notif_prot_other@test.et", Role.SALES,
+                          username="notif_prot_other")
+        note = Notification.objects.create(recipient=recipient, text="hello",
+                                          target="x")
+        client = auth_client_for(recipient)
+        r = client.patch(f"/api/notifications/{note.id}/", {
+            "text": "changed", "target": "y", "recipient": other.id,
+            "is_read": True,
+        })
+        self.assertEqual(r.status_code, 200, r.content)
+        note.refresh_from_db()
+        self.assertEqual(note.text, "hello")
+        self.assertEqual(note.target, "x")
+        self.assertEqual(note.recipient_id, recipient.id)
+        self.assertTrue(note.is_read)
+        self.assertEqual(r.json()["text"], "hello")
+        self.assertEqual(r.json()["target"], "x")
+
+    def test_is_read_update_requires_authorization(self):
+        other = make_user("notif_read_other@test.et", Role.SALES,
+                          username="notif_read_other")
+        me_sales = make_user("notif_read_me@test.et", Role.SALES,
+                             username="notif_read_me")
+        note = Notification.objects.create(recipient=other, text="read-private")
+        owner_client = auth_client_for(other)
+        r = owner_client.patch(f"/api/notifications/{note.id}/",
+                               {"is_read": True})
+        self.assertEqual(r.status_code, 200, r.content)
+        note.refresh_from_db()
+        self.assertTrue(note.is_read)
+
+        intruder_client = auth_client_for(me_sales)
+        note2 = Notification.objects.create(recipient=other, text="read-private-2")
+        r = intruder_client.patch(f"/api/notifications/{note2.id}/",
+                                  {"is_read": True})
+        self.assertIn(r.status_code, (403, 404))
+
+    def test_admin_can_update_others_notification_is_read(self):
+        other = make_user("notif_adminread_other@test.et", Role.SALES,
+                          username="notif_adminread_other")
+        note = Notification.objects.create(recipient=other, text="admin-read")
+        client = auth_client_for(self.admin)
+        r = client.patch(f"/api/notifications/{note.id}/", {"is_read": True})
+        self.assertEqual(r.status_code, 200, r.content)
+        note.refresh_from_db()
+        self.assertTrue(note.is_read)
+
+    def test_creation_restricted_for_ordinary_user(self):
+        client = auth_client_for(make_user("notif_create_user@test.et", Role.SALES,
+                                          username="notif_create_user"))
+        r = client.post("/api/notifications/", {"text": "hello", "target": "x"})
+        self.assertEqual(r.status_code, 403, r.content)
+
+
+class UserSecurityTests(CRUDTestBase):
+    """User role/status protection."""
+
+    def test_non_admin_cannot_access_users(self):
+        client = auth_client_for(self.finance)
+        r = client.get("/api/users/")
+        self.assertEqual(r.status_code, 403, r.content)
+
+    def test_user_cannot_change_own_role(self):
+        client = auth_client_for(self.gm)
+        r = client.patch(f"/api/users/{self.gm.id}/", {"role": "admin"})
+        self.assertEqual(r.status_code, 403, r.content)
+
+    def test_user_cannot_deactivate_self(self):
+        client = auth_client_for(self.gm)
+        r = client.patch(f"/api/users/{self.gm.id}/",
+                         {"status": "Inactive"})
+        self.assertEqual(r.status_code, 403, r.content)
+
+    def test_non_admin_cannot_grant_admin(self):
+        client = auth_client_for(self.finance)
+        r = client.post("/api/users/", {
+            "email": "evil2@test.et", "username": "evil2",
+            "first_name": "Evil", "role": "admin",
+            "status": "Invited", "password": "Testpass123",
+        })
+        self.assertEqual(r.status_code, 403, r.content)
+

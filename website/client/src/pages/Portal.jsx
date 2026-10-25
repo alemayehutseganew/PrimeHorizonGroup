@@ -2,6 +2,7 @@ import React, {useState, useEffect} from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, clearTokens } from '../api/client';
 import './Portal.css';
+import { ResourceManager, RESOURCE_CONFIG } from '../components/ResourceManager';
 
 export const Portal = () => {
   const [loggedIn, setLoggedIn] = useState(false);
@@ -52,6 +53,7 @@ export const Portal = () => {
   useEffect(() => {
     if (!loggedIn) return;
     if (!canView(view)) { setView('dashboard'); return; }
+    if (view !== 'dashboard') { setDataLoading(false); setDataError(''); return; }
     let cancelled = false;
     setDataLoading(true);
     setDataError('');
@@ -179,10 +181,13 @@ export const Portal = () => {
         <nav>
           <ul style={{lineHeight: '1.8', paddingLeft: 0, margin: 0, listStyle: 'none'}}>
             <li style={{margin: '8px 0'}}><Link to="/portal" onClick={() => setView('dashboard')} className={view === 'dashboard' ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}><span style={{marginRight: '10px', color: 'var(--teal-500)'}}>▦</span>Overview</Link></li>
-            {canView('shareholders') && (<li style={{margin: '8px 0'}}><Link to="/portal/shareholders" onClick={() => setView('shareholders')} className={view === 'shareholders' ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}><span style={{marginRight: '10px', color: 'var(--teal-500)'}}>👥</span>Shareholders</Link></li>)}
-            {canView('contributions') && (<li style={{margin: '8px 0'}}><Link to="/portal/contributions" onClick={() => setView('contributions')} className={view === 'contributions' ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}><span style={{marginRight: '10px', color: 'var(--teal-500)'}}>💰</span>Capital Contributions</Link></li>)}
-            {canView('projects') && (<li style={{margin: '8px 0'}}><Link to="/portal/projects" onClick={() => setView('projects')} className={view === 'projects' ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}><span style={{marginRight: '10px', color: 'var(--teal-500)'}}>📁</span>Projects</Link></li>)}
-            {canView('documents') && (<li style={{margin: '8px 0'}}><Link to="/portal/documents" onClick={() => setView('documents')} className={view === 'documents' ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}><span style={{marginRight: '10px', color: 'var(--teal-500)'}}>📄</span>Documents</Link></li>)}
+            {Object.keys(RESOURCE_CONFIG).map((key) => canView(key) && (
+              <li key={key} style={{margin: '8px 0'}}>
+                <Link to={"/portal/" + key} onClick={() => setView(key)} className={view === key ? 'active' : ''} style={{color: 'rgba(255,255,255,0.9)', textDecoration: 'none'}}>
+                  <span style={{marginRight: '10px', color: 'var(--teal-500)'}}>•</span>{RESOURCE_CONFIG[key].title}
+                </Link>
+              </li>
+            ))}
           </ul>
         </nav>
         <div style={{marginTop: 'auto', paddingTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.1)'}}>
@@ -228,41 +233,9 @@ export const Portal = () => {
               )}
             </div>
           )}
-          {!dataLoading && !dataError && view !== 'dashboard' && Array.isArray(data) && (
-            <div>
-              <h2 style={{color: 'var(--navy-900)', marginBottom: '1rem', textTransform: 'capitalize'}}>{view}</h2>
-              {data.length === 0 ? (
-                <p style={{color: 'var(--text-muted)'}}>No records found.</p>
-              ) : (
-                <div style={{overflowX: 'auto'}}>
-                  <table style={{width: '100%', borderCollapse: 'collapse', background: '#fff'}}>
-                    <thead>
-                      <tr>
-                        {Object.keys(data[0]).slice(0, 8).map((k) => (
-                          <th key={k} style={{textAlign: 'left', padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.8rem'}}>{k}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.map((row, i) => (
-                        <tr key={i}>
-                          {Object.keys(data[0]).slice(0, 8).map((k) => (
-                            <td key={k} style={{padding: '8px', borderBottom: '1px solid var(--border)', fontSize: '0.85rem'}}>{String(row[k] ?? '')}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-          {!dataLoading && !dataError && view !== 'dashboard' && !Array.isArray(data) && data && (
-            <div>
-              <h2 style={{color: 'var(--navy-900)', marginBottom: '1rem', textTransform: 'capitalize'}}>{view}</h2>
-              <pre style={{background: '#fff', padding: '1rem', borderRadius: '8px', overflowX: 'auto'}}>{JSON.stringify(data, null, 2)}</pre>
-            </div>
-          )}
+          {!dataLoading && !dataError && view !== 'dashboard' && (
+  <ResourceManager view={view} role={role} />
+)}
         </div>
       </main>
     </div>
